@@ -32,7 +32,7 @@ def test_bec_content():
         relay_analysis={}
     )
     assert res["component_scores"]["content_risk"] > 0
-    
+
 def test_proxy_hosting_infrastructure():
     res = calculate_fraud_score(
         header_analysis={},
@@ -41,7 +41,53 @@ def test_proxy_hosting_infrastructure():
         geolocation_result={"available": True, "proxy": True, "hosting": True}
     )
     assert res["component_scores"]["infrastructure_risk"] == 20
-    
+
+def test_recognized_infra_google():
+    res = calculate_fraud_score(
+        header_analysis={}, content_analysis={},
+        relay_analysis={"probable_origin_ip": "1.1.1.1", "original_received_headers": ["from google.com (google.com [1.1.1.1])"]},
+        geolocation_result={"available": True, "proxy": True, "hosting": True, "location": {"org": "Google LLC"}}
+    )
+    assert res["component_scores"]["infrastructure_risk"] == 0
+    assert any("Recognized email delivery infrastructure" in r for r in res["top_reasons"])
+
+def test_recognized_infra_microsoft():
+    res = calculate_fraud_score(
+        header_analysis={}, content_analysis={},
+        relay_analysis={"probable_origin_ip": "1.1.1.1", "original_received_headers": ["from mail.protection.outlook.com [1.1.1.1]"]},
+        geolocation_result={"available": True, "proxy": True, "hosting": True, "location": {"org": "Microsoft Corporation"}}
+    )
+    assert res["component_scores"]["infrastructure_risk"] == 0
+
+def test_recognized_infra_amazon():
+    res = calculate_fraud_score(
+        header_analysis={}, content_analysis={},
+        relay_analysis={"probable_origin_ip": "1.1.1.1", "original_received_headers": ["from a1-2.smtp-out.amazonses.com [1.1.1.1]"]},
+        geolocation_result={"available": True, "proxy": True, "hosting": True, "location": {"org": "Amazon.com"}}
+    )
+    assert res["component_scores"]["infrastructure_risk"] == 0
+
+def test_recognized_infra_forged_hostname():
+    # Hostname says google.com, but org is EvilHost
+    res = calculate_fraud_score(
+        header_analysis={}, content_analysis={},
+        relay_analysis={"probable_origin_ip": "1.1.1.1", "original_received_headers": ["from google.com [1.1.1.1]"]},
+        geolocation_result={"available": True, "proxy": True, "hosting": True, "location": {"org": "EvilHost"}}
+    )
+    assert res["component_scores"]["infrastructure_risk"] == 20
+    assert not any("Recognized email delivery infrastructure" in r for r in res["top_reasons"])
+
+def test_recognized_infra_still_receives_content_risk():
+    res = calculate_fraud_score(
+        header_analysis={},
+        content_analysis={"indicators": [{"points": 100, "explanation": "Phishing link"}]},
+        relay_analysis={"probable_origin_ip": "1.1.1.1", "original_received_headers": ["from google.com [1.1.1.1]"]},
+        geolocation_result={"available": True, "proxy": True, "hosting": True, "location": {"org": "Google LLC"}}
+    )
+    assert res["component_scores"]["infrastructure_risk"] == 0
+    assert res["component_scores"]["content_risk"] == 25
+
+
 def test_new_domain():
     res = calculate_fraud_score(
         header_analysis={},
@@ -50,7 +96,7 @@ def test_new_domain():
         domain_result={"available": True, "domain_age_days": 5}
     )
     assert res["component_scores"]["domain_risk"] == 15
-    
+
 def test_suspicious_url():
     res = calculate_fraud_score(
         header_analysis={},
@@ -81,7 +127,7 @@ def test_gemini_unavailable():
     )
     assert res["component_scores"]["content_risk"] == 25
     assert "Gemini Analysis" in res["unavailable_sources"]
-    
+
 def test_all_optional_unavailable():
     res = calculate_fraud_score(
         header_analysis={},

@@ -2,6 +2,8 @@
 
 Email Threat Detection and Forensic Intelligence Platform.
 
+**Live Demo:** https://mailtrace-ai.streamlit.app/
+
 ## About the Project
 This is a zero-budget 3-day hackathon project addressing the critical need for accessible, open-source email forensics. It provides an AI-powered interface for analyzing email threats, extracting infrastructure data, and generating forensic reports.
 
@@ -53,7 +55,7 @@ MailTrace AI includes a comprehensive test suite. To run the automated quality g
 ```powershell
 pytest
 ```
-**Current Status:** 100 automated tests passing.
+**Current Status:** 105 automated tests passing.
 
 ## Safe Testing Instructions
 When testing MailTrace AI, **only use synthetic or defanged `.eml` files.** The repository includes safe samples under `sample_emails/` and `tests/fixtures/`. These samples use synthetic domains (e.g., `example.com`), defanged URLs (`hxxp://`), and contain no real recipient identities or active malicious payloads.
@@ -61,3 +63,8 @@ When testing MailTrace AI, **only use synthetic or defanged `.eml` files.** The 
 ## Privacy and Forensic Limitations
 - **Authentication Headers:** SPF, DKIM, and DMARC results are reported strictly as evidence. They are not guaranteed proof of identity or malice.
 - **IP Geolocation:** The geolocation data provided represents the probable geographic region of the infrastructure used (e.g., a data center or relay node). It does **not** represent the physical location or identity of the attacker.
+
+## Deployment Notes
+- This project is hosted for free on **Streamlit Community Cloud**.
+- Gemini AI threat analysis depends on limited free-tier API availability and may experience rate limits.
+- If Gemini is unavailable, all offline features (header analysis, rule-based content scoring, relay geolocation, and forensic report generation) will continue working seamlessly.

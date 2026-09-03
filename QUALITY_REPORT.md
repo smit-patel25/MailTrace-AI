@@ -1,6 +1,6 @@
 # MailTrace AI Quality Gate Report
 
-**Run Date:** 2026-09-03 18:00:17Z
+**Run Date:** 2026-09-03 23:13:43Z
 
 ## Pytest Status: ✅ PASSED
 
@@ -9,21 +9,21 @@
 platform win32 -- Python 3.14.6, pytest-9.1.1, pluggy-1.6.0
 rootdir: E:\MailTrace-AI
 plugins: anyio-4.14.2
-collected 100 items
+collected 105 items
 
-tests\system\test_app_workflows.py .....                                 [  5%]
-tests\test_app_gemini_flow.py ...                                        [  8%]
-tests\test_campaign_correlator.py .......                                [ 15%]
-tests\test_case_database.py ......                                       [ 21%]
-tests\test_content_analyzer.py .....................                     [ 42%]
-tests\test_domain_intelligence.py ....                                   [ 46%]
-tests\test_email_parser.py ............                                  [ 58%]
-tests\test_gemini_analyzer.py ....                                       [ 62%]
-tests\test_geolocation.py ........                                       [ 70%]
-tests\test_header_analyzer.py ....                                       [ 74%]
-tests\test_relay_analyzer.py ......                                      [ 80%]
-tests\test_report_generator.py ....                                      [ 84%]
-tests\test_risk_scoring.py ................                              [100%]
+tests\system\test_app_workflows.py .....                                 [  4%]
+tests\test_app_gemini_flow.py ...                                        [  7%]
+tests\test_campaign_correlator.py .......                                [ 14%]
+tests\test_case_database.py ......                                       [ 20%]
+tests\test_content_analyzer.py .....................                     [ 40%]
+tests\test_domain_intelligence.py ....                                   [ 43%]
+tests\test_email_parser.py ............                                  [ 55%]
+tests\test_gemini_analyzer.py ....                                       [ 59%]
+tests\test_geolocation.py ........                                       [ 66%]
+tests\test_header_analyzer.py ....                                       [ 70%]
+tests\test_relay_analyzer.py ......                                      [ 76%]
+tests\test_report_generator.py ....                                      [ 80%]
+tests\test_risk_scoring.py .....................                         [100%]
 
 ============================== warnings summary ===============================
 .venv\Lib\site-packages\google\genai\types.py:42
@@ -31,7 +31,7 @@ tests\test_risk_scoring.py ................                              [100%]
     VersionedUnionType = Union[builtin_types.UnionType, _UnionGenericAlias]
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-======================= 100 passed, 1 warning in 15.09s =======================
+======================= 105 passed, 1 warning in 15.96s =======================
 ``n
 ## Security Status: ✅ PASSED
 

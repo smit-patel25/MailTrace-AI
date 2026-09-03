@@ -1,0 +1,9 @@
+Message-ID: <test3@example.com>
+Subject: Security Alert
+From: Admin <admin@campaign-sender.example>
+To: victim3@example.com
+Date: Thu, 03 Sep 2026 10:10:00 +0000
+
+A suspicious login was detected.
+Click here to secure your account:
+hxxp://campaign-test.example/secure

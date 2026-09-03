@@ -1,0 +1,20 @@
+Return-Path: <scammer@attacker.example>
+Received: from attacker.example (attacker.example [198.51.100.1])
+        by mx.example.test with ESMTPS id 67890
+        for <employee@example.test>; Wed, 02 Sep 2026 18:00:00 +0000
+Authentication-Results: mx.example.test;
+        spf=fail (mx.example.test: domain of scammer@attacker.example does not designate 198.51.100.1 as permitted sender) smtp.mailfrom=scammer@attacker.example;
+        dmarc=fail (p=none sp=none dis=none) header.from=company.example
+Message-ID: <evil-12345@attacker.example>
+Date: Wed, 02 Sep 2026 17:55:00 +0000
+From: "CEO" <ceo@company.example>
+To: "Employee" <employee@example.test>
+Reply-To: <ceo-urgent@attacker.example>
+Subject: URGENT: Wire Transfer Required
+X-Mailer: PHPMailer 6.0
+Content-Type: text/plain; charset=UTF-8
+
+Please process a wire transfer immediately. 
+Details will follow.
+
+CEO

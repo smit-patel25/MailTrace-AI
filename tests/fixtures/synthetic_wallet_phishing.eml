@@ -1,0 +1,7 @@
+From: attacker@attacker.example
+To: victim@example.com
+Subject: Action Required
+Content-Type: text/plain; charset="utf-8"
+
+Your account will be suspended if you do not verify your login details immediately.
+hxxp://evil-login-verify[.]com

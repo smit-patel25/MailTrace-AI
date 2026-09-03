@@ -1,0 +1,10 @@
+From: attacker@bad.com
+Subject: Urgent: Verify Your Account
+Content-Type: text/html; charset="utf-8"
+
+<html>
+<body>
+<script>alert(1);</script>
+<p>Please <a href="hxxp://malicious.com/login">verify your account</a> immediately to avoid suspension.</p>
+</body>
+</html>

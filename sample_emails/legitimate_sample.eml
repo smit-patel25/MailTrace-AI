@@ -1,0 +1,43 @@
+Return-Path: <sender@example.com>
+Received: from mail-server.example.com (mail-server.example.com [192.0.2.1])
+        by mx.recipient.com with ESMTPS id 12345
+        for <recipient@example.com>; Wed, 02 Sep 2026 17:00:00 +0530
+Received: from localhost (localhost [127.0.0.1])
+        by mail-server.example.com (Postfix) with ESMTP id ABCDE
+        for <recipient@example.com>; Wed, 02 Sep 2026 11:30:00 +0000
+Authentication-Results: mx.recipient.com;
+        dkim=pass header.i=@example.com header.s=default header.b=xyz;
+        spf=pass (mx.recipient.com: domain of sender@example.com designates 192.0.2.1 as permitted sender) smtp.mailfrom=sender@example.com
+Message-ID: <1234567890@example.com>
+Date: Wed, 02 Sep 2026 11:25:00 +0000
+From: "Alice Sender" <sender@example.com>
+To: "Bob Recipient" <recipient@example.com>
+Cc: "Charlie" <charlie@example.com>
+Subject: Project Kickoff Meeting
+Content-Type: multipart/alternative; boundary="----=_Part_12345_67890"
+
+------=_Part_12345_67890
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 7bit
+
+Hi Bob,
+
+Let's schedule our project kickoff meeting for tomorrow.
+Looking forward to working with you!
+
+Best,
+Alice
+------=_Part_12345_67890
+Content-Type: text/html; charset=UTF-8
+Content-Transfer-Encoding: 7bit
+
+<html>
+<head></head>
+<body>
+    <p>Hi Bob,</p>
+    <p>Let's schedule our <strong>project kickoff meeting</strong> for tomorrow.</p>
+    <p>Looking forward to working with you!</p>
+    <p>Best,<br>Alice</p>
+</body>
+</html>
+------=_Part_12345_67890--

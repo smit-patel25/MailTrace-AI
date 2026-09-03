@@ -1,0 +1,13 @@
+From: sender@example.com
+Subject: Multipart test
+Content-Type: multipart/alternative; boundary="boundary-123"
+
+--boundary-123
+Content-Type: text/plain; charset="utf-8"
+
+Plain text version.
+--boundary-123
+Content-Type: text/html; charset="utf-8"
+
+<html><body><p>HTML version.</p></body></html>
+--boundary-123--

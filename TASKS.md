@@ -1,0 +1,28 @@
+# Tasks
+
+- [x] Project foundation
+- [x] Email parser
+- [x] Parser UI integration
+- [x] Header anomaly detection
+- [x] Header analysis UI
+- [x] Relay-chain and origin-IP extraction
+- [x] Relay-chain UI
+- [x] IP geolocation service
+- [x] Geolocation UI and origin map
+- [x] Domain and DNS intelligence service
+- [x] Domain intelligence UI
+- [x] Rule-based content analysis
+- [x] Content analysis UI
+- [x] Gemini analysis service
+- [x] Gemini analysis UI
+- [x] Final fraud-scoring engine
+- [x] Threat assessment UI
+- [x] SQLite case storage
+- [x] Case history UI
+- [x] Campaign correlation backend
+- [x] Campaign correlation UI
+- [x] Analytics dashboard
+- [x] Forensic report generation
+- [x] Forensic report downloads
+- [x] Stability and security hardening
+- [x] Final UI polish

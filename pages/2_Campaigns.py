@@ -2,13 +2,13 @@ import streamlit as st
 import os
 import json
 from modules.campaign_correlator import list_campaigns, get_campaign_cases
-from modules.ui_theme import apply_theme, sidebar_header, footer, risk_badge
+from modules.ui_theme import apply_theme, app_header, sidebar_navigation, footer, risk_badge
 
-st.set_page_config(page_title="Campaigns - MailTrace AI", layout="wide")
+st.set_page_config(page_title="Campaigns - MailTrace AI", layout="wide", initial_sidebar_state="expanded")
 apply_theme()
-sidebar_header()
+sidebar_navigation()
 
-st.title("Campaign Intelligence")
+app_header(title="Campaign Intelligence", subtitle="Correlate cases and track attacker infrastructure", status="Campaigns")
 st.warning("Note: Correlation indicates likely shared infrastructure, not proof of a shared attacker.")
 
 db_path = os.getenv("DB_PATH", "database.sqlite3")

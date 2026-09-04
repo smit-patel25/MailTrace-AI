@@ -3,13 +3,13 @@ import pandas as pd
 import sqlite3
 import os
 import plotly.express as px
-from modules.ui_theme import apply_theme, sidebar_header, footer, risk_badge
+from modules.ui_theme import apply_theme, app_header, sidebar_navigation, footer, risk_badge, apply_chart_theme, style_plotly_figure
 
-st.set_page_config(page_title="Dashboard - MailTrace AI", layout="wide")
+st.set_page_config(page_title="Dashboard - MailTrace AI", layout="wide", initial_sidebar_state="expanded")
 apply_theme()
-sidebar_header()
+sidebar_navigation()
 
-st.title("MailTrace Security Overview")
+app_header(title="MailTrace Security Overview", subtitle="System-wide threat metrics and trends", status="Dashboard")
 
 # Use data/mailtrace.db if exists, otherwise fallback to our local test db database.sqlite3
 db_path = os.getenv("DB_PATH", "data/mailtrace.db")
@@ -48,7 +48,7 @@ else:
         
         c1, c2 = st.columns(2)
         
-        color_map = {"Low": "green", "Moderate": "#ffbf00", "High": "orange", "Critical": "red"}
+        color_map = {"Low": "#14B8A6", "Moderate": "#F59E0B", "High": "#F87171", "Critical": "#EF4444"}
         
         with c1:
             st.subheader("Risk Level Distribution")
@@ -56,13 +56,15 @@ else:
             risk_counts.columns = ['Risk Level', 'Count']
             fig_risk = px.pie(risk_counts, values='Count', names='Risk Level', 
                               color='Risk Level', color_discrete_map=color_map, hole=0.4)
+            fig_risk = apply_chart_theme(fig_risk)
             st.plotly_chart(fig_risk, use_container_width=True)
             
         with c2:
             st.subheader("Fraud Score Distribution")
             fig_score = px.histogram(cases_df, x='fraud_score', nbins=20, 
-                                     color_discrete_sequence=['#4287f5'])
+                                     color_discrete_sequence=['#00E5FF'])
             fig_score.update_layout(xaxis_title="Fraud Score", yaxis_title="Count")
+            fig_score = apply_chart_theme(fig_score)
             st.plotly_chart(fig_score, use_container_width=True)
             
         st.markdown("---")

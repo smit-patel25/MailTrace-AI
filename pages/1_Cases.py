@@ -5,13 +5,13 @@ import json
 import os
 from modules.case_database import get_case, list_cases
 from modules.report_generator import generate_json_report, generate_html_report, generate_pdf_report
-from modules.ui_theme import apply_theme, sidebar_header, footer, risk_badge
+from modules.ui_theme import apply_theme, app_header, sidebar_navigation, get_risk_color, risk_badge, footer
 
-st.set_page_config(page_title="Cases - MailTrace AI", layout="wide")
+st.set_page_config(page_title="Cases - MailTrace AI", layout="wide", initial_sidebar_state="expanded")
 apply_theme()
-sidebar_header()
+sidebar_navigation()
 
-st.title("Case Management")
+app_header(title="Case Management", subtitle="View and manage saved forensic cases", status="Cases")
 
 db_path = os.getenv("DB_PATH", "data/mailtrace.db")
 if not os.path.exists(db_path) and os.path.exists("database.sqlite3"):

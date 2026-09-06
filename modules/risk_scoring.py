@@ -64,7 +64,9 @@ def calculate_fraud_score(
                     infra_points += 10
                     top_reasons.append("Origin IP belongs to a hosting provider/datacenter.")
         else:
-            unavailable_sources.append("Geolocation")
+            unavailable_sources.append("Geolocation (Unavailable)")
+    else:
+        unavailable_sources.append("Geolocation (Not checked)")
 
     infra_score = min(20, infra_points)
 

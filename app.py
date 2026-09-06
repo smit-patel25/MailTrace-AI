@@ -10,7 +10,9 @@ from modules.relay_analyzer import analyze_relay_chain
 from modules.geolocation import geolocate_ip
 from modules.domain_intelligence import analyze_domain
 from modules.content_analyzer import analyze_content
+from modules.attachment_analyzer import analyze_attachments
 from modules.gemini_analyzer import analyze_with_gemini
+from modules.gemini_rate_limiter import get_global_quota_manager, QuotaStatus
 from modules.risk_scoring import calculate_fraud_score
 from modules.ui_theme import apply_theme, app_header, section_header, sidebar_navigation, footer, risk_badge, get_risk_color
 import folium
@@ -22,11 +24,134 @@ st.set_page_config(page_title="MailTrace AI", layout="wide", initial_sidebar_sta
 apply_theme()
 sidebar_navigation()
 
+DEMO_DIR = os.path.join(os.path.dirname(__file__), "sample_emails", "demo")
+
+DEMO_SAMPLES = {
+    "legitimate_team_update": {
+        "key": "legitimate_team_update",
+        "name": "Legitimate Email",
+        "filename": "legitimate_team_update.eml",
+        "path": os.path.abspath(os.path.join(DEMO_DIR, "legitimate_team_update.eml")),
+        "desc": "Routine internal project update with passing authentication.",
+    },
+    "credential_phishing": {
+        "key": "credential_phishing",
+        "name": "Credential Phishing",
+        "filename": "credential_phishing.eml",
+        "path": os.path.abspath(os.path.join(DEMO_DIR, "credential_phishing.eml")),
+        "desc": "Account suspension panic lure with fake login link.",
+    },
+    "executive_bec_request": {
+        "key": "executive_bec_request",
+        "name": "Executive BEC Scam",
+        "filename": "executive_bec_request.eml",
+        "path": os.path.abspath(os.path.join(DEMO_DIR, "executive_bec_request.eml")),
+        "desc": "Urgent confidential wire transfer request impersonating MD.",
+    }
+}
+
+
+def clear_email_session_state():
+    """Safely reset email-specific results and cached state without clearing global state."""
+    keys_to_clear = ["geo_result", "domain_result", "current_file_name"]
+    for k in list(st.session_state.keys()):
+        if k.startswith("gemini_") and not k.startswith("gemini_attempts") and not k.startswith("gemini_successes") and not k.startswith("gemini_failures"):
+            keys_to_clear.append(k)
+    for k in keys_to_clear:
+        if k in st.session_state:
+            del st.session_state[k]
+
+
+def get_demo_file_data(demo_key: str):
+    """Retrieve demo fixture bytes with strict allowlist and path traversal prevention."""
+    if demo_key not in DEMO_SAMPLES:
+        raise ValueError(f"Invalid demo identifier: {demo_key}")
+
+    sample = DEMO_SAMPLES[demo_key]
+    filepath = sample["path"]
+
+    abs_dir = os.path.abspath(DEMO_DIR)
+    real_path = os.path.abspath(filepath)
+    if not real_path.startswith(abs_dir):
+        raise ValueError("Path traversal attempt detected.")
+
+    if not os.path.exists(real_path):
+        raise FileNotFoundError(f"Demo file not found: {real_path}")
+
+    with open(real_path, "rb") as f:
+        content = f.read()
+
+    return content, sample
+
+
 app_header()
 
 uploaded_file = st.file_uploader("Upload an .eml file", type=["eml"])
 
-if uploaded_file is None:
+st.markdown("### Try a safe demo")
+st.caption("Explore MailTrace AI using synthetic emails. Demo analysis runs offline and does not use your Gemini quota.")
+
+col_d1, col_d2, col_d3 = st.columns(3)
+with col_d1:
+    click_legit = st.button("🟢 Legitimate Email", key="demo_legitimate", help="Analyze synthetic legitimate email offline", use_container_width=True)
+with col_d2:
+    click_phish = st.button("🔴 Credential Phishing", key="demo_credential_phishing", help="Analyze synthetic credential phishing email offline", use_container_width=True)
+with col_d3:
+    click_bec = st.button("🟣 Executive BEC Scam", key="demo_executive_bec", help="Analyze synthetic executive BEC scam email offline", use_container_width=True)
+
+if click_legit:
+    selected_demo = "legitimate_team_update"
+elif click_phish:
+    selected_demo = "credential_phishing"
+elif click_bec:
+    selected_demo = "executive_bec_request"
+else:
+    selected_demo = None
+
+current_upload_name = uploaded_file.name if uploaded_file else None
+previous_upload_name = st.session_state.get("last_uploaded_name")
+
+if selected_demo:
+    if st.session_state.get("active_source") != "demo" or st.session_state.get("active_demo_key") != selected_demo:
+        clear_email_session_state()
+    st.session_state.active_source = "demo"
+    st.session_state.active_demo_key = selected_demo
+elif current_upload_name != previous_upload_name:
+    st.session_state.last_uploaded_name = current_upload_name
+    if current_upload_name is not None:
+        if st.session_state.get("active_source") != "upload" or st.session_state.get("current_file_name") != current_upload_name:
+            clear_email_session_state()
+        st.session_state.active_source = "upload"
+    else:
+        if st.session_state.get("active_source") == "upload":
+            clear_email_session_state()
+            st.session_state.active_source = None
+
+active_source = st.session_state.get("active_source")
+raw_bytes = None
+filename = ""
+display_name = ""
+is_demo = False
+sample_info = {}
+
+if active_source == "demo":
+    demo_key = st.session_state.get("active_demo_key")
+    if demo_key in DEMO_SAMPLES:
+        try:
+            raw_bytes, sample_info = get_demo_file_data(demo_key)
+            filename = sample_info["filename"]
+            display_name = sample_info["name"]
+            is_demo = True
+        except Exception as e:
+            st.error(f"Error loading demo sample: {e}")
+            raw_bytes = None
+elif active_source == "upload" and uploaded_file is not None:
+    raw_bytes = uploaded_file.getvalue()
+    filename = uploaded_file.name
+    display_name = uploaded_file.name
+    is_demo = False
+
+if raw_bytes is None:
     st.markdown("""
         <div style="display: flex; gap: 1rem; margin-top: 1rem; margin-bottom: 2rem; flex-wrap: wrap;">
             <div class="soc-card card-cyan" style="flex: 1; min-width: 220px; margin-bottom: 0;">
@@ -50,36 +175,76 @@ if uploaded_file is None:
         </div>
     """, unsafe_allow_html=True)
 
-if uploaded_file is not None:
-    if "current_file_name" not in st.session_state or st.session_state.current_file_name != uploaded_file.name:
-        st.session_state.current_file_name = uploaded_file.name
+if raw_bytes is not None:
+    if "current_file_name" not in st.session_state or st.session_state.current_file_name != filename:
+        st.session_state.current_file_name = filename
         if "geo_result" in st.session_state:
             del st.session_state["geo_result"]
         if "domain_result" in st.session_state:
             del st.session_state["domain_result"]
 
-    # 2 MB limit
-    MAX_FILE_SIZE = 2 * 1024 * 1024
-    if uploaded_file.size > MAX_FILE_SIZE:
+    # Size is also validated inside parse_eml_bytes; keep this fast-path so we
+    # never pass clearly oversized data to the parser.
+    if len(raw_bytes) > 2 * 1024 * 1024:
         st.error("File exceeds the maximum allowed size of 2 MB.")
     else:
-        # Read file as bytes
-        raw_bytes = uploaded_file.getvalue()
         email_hash = hashlib.sha256(raw_bytes).hexdigest()
+
+        if is_demo:
+            st.markdown(f"""
+            <div class="soc-card" style="border-left: 4px solid var(--accent-primary); margin-bottom: 1.5rem; background: var(--surface-secondary);">
+                <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
+                    <div>
+                        <span class="badge badge-none" style="background: rgba(25, 195, 230, 0.15); color: var(--accent-primary); border: 1px solid var(--accent-primary); font-weight: 600;">
+                            Demo sample
+                        </span>
+                        <h3 style="margin: 0.4rem 0 0.2rem 0; color: var(--text-primary);">{html.escape(display_name)} <span style="font-size: 0.9rem; color: var(--text-muted);">({html.escape(filename)})</span></h3>
+                        <small style="color: var(--text-muted);">{html.escape(sample_info.get('desc', ''))}</small>
+                    </div>
+                    <div>
+                        <span style="display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.35rem 0.75rem; border-radius: var(--radius-sm); background: var(--surface-elevated); color: var(--text-secondary); font-size: 0.85rem; border: 1px solid var(--border-primary);">
+                            🔒 Offline analysis — no external services called
+                        </span>
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
 
         # Parse
         parsed_data = parse_eml_bytes(raw_bytes)
 
-        # Handle parser errors gracefully
-        if "defects" in parsed_data and any("Fatal parsing error" in str(d) for d in parsed_data["defects"]):
+        # --- Hard rejection: safety limit exceeded ---
+        if parsed_data.get("rejected"):
+            human_msg = parsed_data.get(
+                "rejection_human",
+                "This email exceeds MailTrace AI's safe analysis limits and was not processed.",
+            )
+            st.error(human_msg)
+            # Ensure no partial state persists for this email
+            for _k in ("geo_result", "domain_result", f"gemini_{email_hash}"):
+                st.session_state.pop(_k, None)
+
+        # --- Fatal parse error ---
+        elif "defects" in parsed_data and any("Fatal parsing error" in str(d) for d in parsed_data["defects"]):
             st.error("Failed to parse the email file. Please ensure it is a valid .eml format.")
         else:
             st.success("Email parsed successfully!")
+
+            # --- Partial-analysis warning ---
+            if parsed_data.get("content_truncated"):
+                orig = parsed_data.get("content_original_chars", 0)
+                analyzed = parsed_data.get("content_analyzed_chars", 0)
+                st.warning(
+                    f"Partial analysis: Some content was excluded because the email exceeded safe processing limits. "
+                    f"Email body ({orig:,} characters) was truncated to {analyzed:,} characters for analysis. "
+                    "Offline results are available but do not reflect the full email."
+                )
 
             # Run core analyzers
             analysis = analyze_headers(parsed_data)
             relay_analysis = analyze_relay_chain(parsed_data)
             content_analysis = analyze_content(parsed_data)
+            attachment_analysis = analyze_attachments(parsed_data)
 
             geo_res = st.session_state.get("geo_result")
             domain_res = st.session_state.get("domain_result")
@@ -166,11 +331,11 @@ if uploaded_file is not None:
             section_header("Case Management", "indigo")
             if st.button("Save as Case"):
                 with st.spinner("Saving case..."):
-                    from modules.case_database import save_case
+                    from modules.session_case_store import save_case
                     from modules.campaign_correlator import correlate_case
 
                     case_data = {
-                        "filename": uploaded_file.name,
+                        "filename": filename,
                         "email_hash": email_hash,
                         "subject": parsed_data.get("subject", ""),
                         "sender_address": parsed_data.get("from", ""),
@@ -186,14 +351,15 @@ if uploaded_file is not None:
                             "header_analysis": analysis,
                             "relay_analysis": relay_analysis,
                             "content_analysis": content_analysis,
+                            "attachment_analysis": attachment_analysis,
                             "fraud_score": fraud_score
                         }
                     }
-                    db_path = os.getenv("DB_PATH", "database.sqlite3")
-                    case_id = save_case(db_path, case_data)
+
+                    case_id = save_case(case_data)
                     st.success(f"Successfully saved as {case_id}.")
 
-                    corr_res = correlate_case(db_path, case_id)
+                    corr_res = correlate_case(None, case_id)
                     if corr_res.get("status") == "joined_campaign":
                         st.info(f"Case joined existing campaign: **{corr_res['campaign_id']}**")
                     elif corr_res.get("status") == "created_campaign":
@@ -268,14 +434,37 @@ if uploaded_file is not None:
                 st.info(f"**IP:** {relay_analysis['probable_origin_ip']}  \n**Confidence:** {relay_analysis['origin_confidence'].upper()}  \n**Explanation:** {relay_analysis['confidence_explanation']}")
 
                 if os.getenv("ENABLE_GEOLOCATION", "true").lower() != "false":
-                    if st.button("Check infrastructure location"):
-                        with st.spinner("Geolocating IP..."):
-                            st.session_state.geo_result = geolocate_ip(relay_analysis['probable_origin_ip'])
+                    geo_consent_key = f"geo_consent_{email_hash}"
+
+                    if "geo_result" not in st.session_state:
+                        st.markdown("""
+                        <div class="soc-card card-purple" style="margin-bottom: 1rem; padding: 1rem 1.25rem;">
+                            <p style="margin-bottom: 0.4rem;"><strong>Optional Infrastructure Geolocation</strong></p>
+                            <p style="font-size: 0.88rem; color: var(--text-secondary); margin-bottom: 0.5rem; line-height: 1.45;">
+                                No email body, subject, address or attachment is transmitted. IP geolocation is approximate and does not identify the sender or attacker. Offline analysis remains available without this lookup.
+                            </p>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                        has_geo_consent = st.checkbox(
+                            "I understand that the public relay IP address will be sent to FreeIPAPI for approximate infrastructure geolocation.",
+                            key=geo_consent_key
+                        )
+
+                        if st.button("Check infrastructure location", disabled=not has_geo_consent):
+                            with st.spinner("Geolocating IP..."):
+                                st.session_state.geo_result = geolocate_ip(relay_analysis['probable_origin_ip'])
+                                st.rerun()
+                        else:
+                            st.info("Infrastructure lookup not requested")
 
                     if "geo_result" in st.session_state:
                         geo_result = st.session_state.geo_result
-                        if geo_result.get("available"):
-                            st.markdown("### Estimated infrastructure location")
+
+                        if geo_result.get("error") == "IP is private, reserved, or non-routable.":
+                            st.info("Private or non-global IP addresses are not sent externally.")
+                        elif geo_result.get("available"):
+                            st.markdown("### Approximate infrastructure result")
                             st.warning("Note: This does not represent the attacker's exact physical location.")
                             loc = geo_result.get("location", {})
 
@@ -301,7 +490,7 @@ if uploaded_file is not None:
                                 ).add_to(m)
                                 st_folium(m, width=700, height=500)
                         else:
-                            st.warning(f"Geolocation failed: {geo_result.get('error')}")
+                            st.warning("Lookup unavailable — offline assessment preserved")
             else:
                 st.warning("No reliable public origin could be determined from the relay chain.")
 
@@ -420,11 +609,64 @@ if uploaded_file is not None:
                 for url in content_analysis["defanged_urls"]:
                     st.code(url, language="text")
 
+            # Attachment Forensics
+            section_header("Attachment Forensics", "indigo")
+            st.markdown("<p style='font-size:0.85rem; color:var(--text-muted); margin-top:-8px; margin-bottom:12px;'>Attachment assessment is based on metadata only and is not a malware scan.</p>", unsafe_allow_html=True)
+
+            atts = attachment_analysis.get("attachments", [])
+            if not atts:
+                st.info("No attachments detected.")
+            else:
+                for att in atts:
+                    r_lvl = att["risk_level"]
+                    if r_lvl == "High":
+                        border_col = "var(--severity-high)"
+                        badge_cls = "badge-high"
+                        icon = "⚠️"
+                    elif r_lvl == "Review":
+                        border_col = "var(--severity-medium)"
+                        badge_cls = "badge-medium"
+                        icon = "🔍"
+                    else:
+                        border_col = "var(--severity-low)"
+                        badge_cls = "badge-low"
+                        icon = "✓"
+
+                    reasons_html = ""
+                    if att["reasons"]:
+                        reasons_list = "".join([f"<li>{html.escape(r)}</li>" for r in att["reasons"]])
+                        reasons_html = f"<div style='margin-top:8px; font-size:0.85rem;'><strong>Indicators / Reasons:</strong><ul style='margin:4px 0 0 18px; padding:0;'>{reasons_list}</ul></div>"
+
+                    card_html = f"""
+                    <div class="soc-card" style="border-left: 4px solid {border_col}; margin-bottom: 12px; padding: 12px 16px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                            <div style="font-weight:600; font-size:0.95rem; word-break:break-all; color:var(--text-main);">
+                                📄 {html.escape(att['filename'])}
+                            </div>
+                            <div>
+                                <span class="badge {badge_cls}" style="font-size:0.75rem; text-transform:uppercase;">
+                                    {icon} Metadata Risk: {html.escape(r_lvl)}
+                                </span>
+                            </div>
+                        </div>
+                        <div style="font-size:0.85rem; color:var(--text-secondary); margin-top:8px; display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:6px;">
+                            <div><strong>Type:</strong> <code>{html.escape(att['content_type'])}</code></div>
+                            <div><strong>Size:</strong> {html.escape(att['human_size'])} ({att['size']:,} B)</div>
+                        </div>
+                        <div style="font-size:0.8rem; color:var(--text-muted); margin-top:6px; word-break:break-all;">
+                            <strong>SHA-256:</strong> <code>{html.escape(att['sha256'])}</code>
+                        </div>
+                        {reasons_html}
+                    </div>
+                    """
+                    st.markdown(card_html, unsafe_allow_html=True)
+
             # AI Threat Analysis
             section_header("AI Threat Analysis", "purple")
             gemini_key = f"gemini_{email_hash}"
             gemini_lock_key = f"gemini_lock_{email_hash}"
             gemini_cooldown_key = f"gemini_cooldown_{email_hash}"
+            gemini_consent_key = f"gemini_consent_{email_hash}"
 
             for k in ["gemini_attempts", "gemini_successes", "gemini_failures"]:
                 if k not in st.session_state:
@@ -438,20 +680,34 @@ if uploaded_file is not None:
             btn_label = "Try AI analysis again" if is_failed else "Run optional AI content analysis"
 
             if not has_result or is_failed:
+                st.markdown("""
+                <div class="soc-card card-purple" style="margin-bottom: 1rem; padding: 1rem 1.25rem;">
+                    <p style="margin-bottom: 0.4rem;"><strong>Gemini AI Privacy & Data Handling</strong></p>
+                    <p style="font-size: 0.88rem; color: var(--text-secondary); margin-bottom: 0.5rem; line-height: 1.45;">
+                        Offline analysis does not send email content externally. Gemini analysis is optional and may send the email text and relevant headers to Google.
+                    </p>
+                    <small style="color: var(--text-muted); display: block; line-height: 1.4;">
+                        Privacy Note: Do not submit emails containing confidential personal data, active credentials, sensitive financial records, or restricted organizational information unless authorized.
+                    </small>
+                </div>
+                """, unsafe_allow_html=True)
+
+                has_consent = st.checkbox(
+                    "I understand that email content will be sent to Google Gemini for AI analysis.",
+                    key=gemini_consent_key
+                )
+
                 col1, col2 = st.columns([1, 2])
                 with col1:
-                    btn_disabled = is_running
+                    btn_disabled = is_running or not has_consent
                     if st.button(btn_label, disabled=btn_disabled, key=f"btn_{email_hash}"):
-                        now = time.monotonic()
-                        cooldown_end = st.session_state.get(gemini_cooldown_key, 0) + 15
-                        if is_failed and now < cooldown_end:
-                            st.toast(f"Please wait {int(cooldown_end - now)}s before retrying.")
-                        else:
-                            st.session_state[gemini_lock_key] = True
-                            st.rerun()
+                        st.session_state[gemini_lock_key] = True
+                        st.rerun()
 
                 with col2:
-                    if is_failed:
+                    if not has_consent:
+                        st.caption("Check privacy consent above to enable AI analysis.")
+                    elif is_failed:
                         st.write("AI result unavailable")
                         st.caption("Retrying uses another Gemini request.")
                     else:
@@ -461,6 +717,19 @@ if uploaded_file is not None:
 
                 if is_running:
                     with st.spinner("AI analysis in progress..."):
+                        quota_mgr = get_global_quota_manager()
+                        cooldown_end = st.session_state.get(gemini_cooldown_key, 0)
+
+                        status, msg = quota_mgr.check_and_reserve(
+                            st.session_state.gemini_attempts,
+                            cooldown_end
+                        )
+
+                        if status != QuotaStatus.ALLOWED:
+                            st.toast(msg)
+                            st.session_state[gemini_lock_key] = False
+                            st.rerun()
+
                         try:
                             st.session_state.gemini_attempts += 1
                             subject = parsed_data.get("subject", "")
@@ -472,7 +741,11 @@ if uploaded_file is not None:
                                 st.session_state[gemini_key] = res
                             else:
                                 st.session_state.gemini_failures += 1
-                                st.session_state[gemini_cooldown_key] = time.monotonic()
+                                try:
+                                    cooldown_secs = int(os.environ.get("GEMINI_COOLDOWN_SECONDS", "30"))
+                                except ValueError:
+                                    cooldown_secs = 30
+                                st.session_state[gemini_cooldown_key] = time.monotonic() + cooldown_secs
                                 st.session_state[gemini_key] = res
                                 err_msg = str(res.get("error", ""))
                                 if "503" in err_msg:
@@ -486,6 +759,7 @@ if uploaded_file is not None:
                                 else:
                                     st.toast("AI analysis could not be completed. Offline forensic results remain available.")
                         finally:
+                            quota_mgr.release_in_flight()
                             st.session_state[gemini_lock_key] = False
                             st.rerun()
 
@@ -544,11 +818,49 @@ if uploaded_file is not None:
                 else:
                     st.info("No HTML body found.")
 
-            # Attachments
-            if parsed_data.get("attachments"):
-                section_header("Attachments Metadata", "cyan")
-                for att in parsed_data["attachments"]:
-                    st.write(f"- **Filename:** {att['filename']} | **Type:** {att['content_type']} | **Size:** {att['size']} bytes")
+            # Attachment Forensics
+            section_header("Attachment Forensics", "cyan")
+            st.caption("ℹ️ Attachment assessment is based on metadata only and is not a malware scan.")
+
+            if attachment_analysis.get("attachment_count", 0) == 0:
+                st.info("No attachments detected.")
+            else:
+                for att in attachment_analysis.get("attachments", []):
+                    r_level = att["risk_level"]
+                    r_color = "var(--danger)" if r_level == "High" else ("var(--warning)" if r_level == "Review" else "var(--success)")
+                    r_icon = "🚨 High Risk" if r_level == "High" else ("⚠️ Review Required" if r_level == "Review" else "✅ Low Risk")
+
+                    reasons_html = ""
+                    if att["reasons"]:
+                        reasons_html = "<div style='margin-top: 0.5rem;'><strong>Indicators:</strong><ul style='margin-top: 0.25rem; margin-bottom: 0; padding-left: 1.2rem;'>"
+                        for r in att["reasons"]:
+                            reasons_html += f"<li>{html.escape(r)}</li>"
+                        reasons_html += "</ul></div>"
+                    else:
+                        reasons_html = "<div style='margin-top: 0.5rem; color: var(--text-muted);'><small>No suspicious metadata indicators detected.</small></div>"
+
+                    st.markdown(f"""
+                    <div class="soc-card" style="border-left: 4px solid {r_color}; margin-bottom: 1rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.5rem;">
+                            <div style="word-break: break-all; max-width: 75%;">
+                                <h4 style="margin: 0; word-break: break-all;">📎 {html.escape(att['filename'])}</h4>
+                            </div>
+                            <div>
+                                <span style="font-weight: 600; font-size: 0.85rem; color: {r_color}; background: var(--surface-elevated); padding: 0.25rem 0.6rem; border-radius: var(--radius-sm); border: 1px solid var(--border-primary);">
+                                    {r_icon}
+                                </span>
+                            </div>
+                        </div>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.5rem; font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.5rem;">
+                            <div><strong>Declared Type:</strong> <code>{html.escape(att['content_type'])}</code></div>
+                            <div><strong>Size:</strong> {html.escape(att['human_size'])} ({att['size']} bytes)</div>
+                        </div>
+                        <div style="font-size: 0.85rem; color: var(--text-muted); word-break: break-all; margin-bottom: 0.5rem;">
+                            <strong>SHA-256:</strong> <code style="word-break: break-all;">{html.escape(att['sha256'])}</code>
+                        </div>
+                        {reasons_html}
+                    </div>
+                    """, unsafe_allow_html=True)
 
             # Show any defects if present
             if parsed_data.get("defects"):

@@ -1,4 +1,5 @@
 import pytest
+import dns.exception
 from unittest.mock import patch, Mock
 import datetime
 from modules.domain_intelligence import analyze_domain, validate_and_normalize_domain, _DOMAIN_CACHE
@@ -68,7 +69,7 @@ def test_successful_domain_analysis(mock_whois, mock_resolve):
 @patch('modules.domain_intelligence.whois.whois')
 def test_missing_records_and_cached(mock_whois, mock_resolve):
     mock_whois.side_effect = Exception("WHOIS timeout")
-    mock_resolve.side_effect = Exception("DNS timeout")
+    mock_resolve.side_effect = dns.exception.DNSException("DNS timeout")
     
     res = analyze_domain("missing.com")
     assert res["available"] is True

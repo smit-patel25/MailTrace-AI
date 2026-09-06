@@ -56,6 +56,9 @@ def test_gemini_success_flow(isolate_env, monkeypatch):
 
     assert len(calls) == 0
 
+    # Check consent checkbox
+    at.checkbox[0].set_value(True).run()
+
     # Click the button
     btn = next(b for b in at.button if b.label == "Run optional AI content analysis")
     btn.click().run()
@@ -74,6 +77,7 @@ def test_gemini_success_flow(isolate_env, monkeypatch):
 
 
 def test_gemini_failures_cooldown(isolate_env, monkeypatch):
+    monkeypatch.setenv("GEMINI_SESSION_DAILY_LIMIT", "10")
     calls = []
     error_to_return = "503 Service Unavailable"
 
@@ -92,6 +96,9 @@ def test_gemini_failures_cooldown(isolate_env, monkeypatch):
 
     # Initial offline score is intact
     assert len(at.metric) == 1  # Only Rule-based initially (or something else, just check score later)
+
+    # Enable consent checkbox
+    at.checkbox[0].set_value(True).run()
 
     # 503 error
     btn = next(b for b in at.button if b.label == "Run optional AI content analysis")
@@ -113,7 +120,7 @@ def test_gemini_failures_cooldown(isolate_env, monkeypatch):
     btn.click().run()
     assert len(calls) == 1
     toasts = [t.value for t in at.toast]
-    assert any("Please wait" in t for t in toasts)
+    assert any("AI analysis is currently busy" in t for t in toasts)
 
     # Fast forward time to test manual retry
     monkeypatch.setattr("time.monotonic", lambda: time.time() + 20)
@@ -135,8 +142,8 @@ def test_gemini_failures_cooldown(isolate_env, monkeypatch):
     assert "Threat Assessment" in html
     assert "What this result means" in html
 
-    # Fast forward time again
-    monkeypatch.setattr("time.monotonic", lambda: time.time() + 40)
+    # Fast forward time again to bypass the 30s cooldown set by the 429 error
+    monkeypatch.setattr("time.monotonic", lambda: time.time() + 100)
 
     # 404 error
     error_to_return = "404 Not Found"
@@ -145,8 +152,8 @@ def test_gemini_failures_cooldown(isolate_env, monkeypatch):
     toasts = [t.value for t in at.toast]
     assert any("configured Gemini model is unavailable" in t for t in toasts)
 
-    # Fast forward time again
-    monkeypatch.setattr("time.monotonic", lambda: time.time() + 60)
+    # Fast forward time again to bypass the cooldown set by the 404 error
+    monkeypatch.setattr("time.monotonic", lambda: time.time() + 150)
 
     # Timeout error
     error_to_return = "Timeout"

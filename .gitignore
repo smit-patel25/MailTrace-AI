@@ -43,3 +43,6 @@ phishing*.mbox
 *.log
 
 !.env.example
+
+# Streamlit secrets
+.streamlit/secrets.toml

@@ -155,6 +155,13 @@ def test_gemini_button_and_caption(isolate_env):
     assert "Run optional AI content analysis" in buttons
     assert "Check sender domain details" in buttons
 
-    # Caption exists
+    # Caption before consent
     captions = [c.value for c in at.caption]
-    assert "Uses one Gemini request. Offline forensic results remain available without it." in captions
+    assert "Check privacy consent above to enable AI analysis." in captions
+
+    # Enable consent
+    at.checkbox[0].set_value(True).run()
+
+    # Caption after consent
+    captions_after = [c.value for c in at.caption]
+    assert "Uses one Gemini request. Offline forensic results remain available without it." in captions_after

@@ -1,0 +1,33 @@
+From: "Alex Taylor" <alex@company.example>
+To: "Employee" <employee@example.test>
+Subject: Weekly project update
+Authentication-Results: mx.example.test; spf=pass smtp.mailfrom=company.example; dkim=pass header.d=company.example; dmarc=pass
+Return-Path: <alex@company.example>
+Date: Fri, 04 Sep 2026 09:10:00 +0000
+Message-ID: <update-20260904@company.example>
+Received: from mail.company.example (mail.company.example [192.0.2.10])
+        by mx.example.test with ESMTPS id 10001
+        for <employee@example.test>; Fri, 04 Sep 2026 09:10:00 +0000
+Content-Type: multipart/alternative; boundary="boundary_legit"
+
+--boundary_legit
+Content-Type: text/plain; charset="utf-8"
+
+Hi Team,
+
+Here is our weekly project update. Everything is on schedule for Q3 milestone.
+Please review the summary doc when you have time.
+
+More details: hxxps://conference.example/info
+
+Best regards,
+Alex
+--boundary_legit
+Content-Type: text/html; charset="utf-8"
+
+<html><body>
+<p>Hi Team,</p>
+<p>Here is our weekly project update. Everything is on schedule for Q3 milestone.</p>
+<p>More details: <a href="hxxps://conference.example/info">hxxps://conference.example/info</a></p>
+</body></html>
+--boundary_legit--

@@ -451,7 +451,7 @@ def apply_theme():
             border-color:     var(--accent-primary) !important;
             background-color: rgba(25, 195, 230, 0.08) !important;
         }}
-        
+
         [data-testid="stFileUploaderDropzoneInstructions"],
         [data-testid="stFileUploaderDropzoneInstructions"] span,
         [data-testid="stFileUploaderDropzoneInstructions"] div {{
@@ -584,7 +584,7 @@ def apply_theme():
         .component-card.accent-teal   {{ border-top-color: var(--success) !important; }}
         .component-card.accent-violet {{ border-top-color: var(--accent-purple) !important; }}
         .component-card.accent-blue   {{ border-top-color: var(--accent-blue) !important; }}
-        
+
         .component-title {{
             color:          var(--text-muted) !important;
             font-size:      0.85rem !important;
@@ -631,6 +631,92 @@ def apply_theme():
         }}
 
         /* ================================================================
+           ONE-CLICK DEMO BUTTON INTERACTION ANIMATIONS (SCOPED ONLY)
+           ================================================================ */
+
+        /* Common base transition for scoped demo buttons */
+        div.st-key-demo_legitimate button,
+        [data-testid="stBaseButton-demo_legitimate"],
+        div.st-key-demo_credential_phishing button,
+        [data-testid="stBaseButton-demo_credential_phishing"],
+        div.st-key-demo_executive_bec button,
+        [data-testid="stBaseButton-demo_executive_bec"] {{
+            transition: transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1),
+                        border-color 200ms ease,
+                        box-shadow 200ms ease,
+                        background-color 200ms ease !important;
+        }}
+
+        /* 1. Legitimate Email (Safe Cyan/Teal Accent) */
+        @media (hover: hover) and (pointer: fine) {{
+            div.st-key-demo_legitimate button:hover,
+            [data-testid="stBaseButton-demo_legitimate"]:hover {{
+                transform: translateY(-2px) !important;
+                border-color: var(--accent-primary) !important;
+                box-shadow: 0 4px 12px rgba(25, 195, 230, 0.25) !important;
+                background-color: var(--surface-hover) !important;
+            }}
+        }}
+        div.st-key-demo_legitimate button:active,
+        [data-testid="stBaseButton-demo_legitimate"]:active {{
+            transform: translateY(0) scale(0.98) !important;
+            box-shadow: 0 1px 3px rgba(25, 195, 230, 0.15) !important;
+        }}
+
+        /* 2. Credential Phishing (Warning Amber/Red Accent) */
+        @media (hover: hover) and (pointer: fine) {{
+            div.st-key-demo_credential_phishing button:hover,
+            [data-testid="stBaseButton-demo_credential_phishing"]:hover {{
+                transform: translateY(-2px) !important;
+                border-color: var(--danger) !important;
+                box-shadow: 0 4px 12px rgba(249, 112, 102, 0.25) !important;
+                background-color: var(--surface-hover) !important;
+            }}
+        }}
+        div.st-key-demo_credential_phishing button:active,
+        [data-testid="stBaseButton-demo_credential_phishing"]:active {{
+            transform: translateY(0) scale(0.98) !important;
+            box-shadow: 0 1px 3px rgba(249, 112, 102, 0.15) !important;
+        }}
+
+        /* 3. Executive BEC Scam (Professional Violet Accent) */
+        @media (hover: hover) and (pointer: fine) {{
+            div.st-key-demo_executive_bec button:hover,
+            [data-testid="stBaseButton-demo_executive_bec"]:hover {{
+                transform: translateY(-2px) !important;
+                border-color: var(--accent-purple) !important;
+                box-shadow: 0 4px 12px rgba(166, 120, 255, 0.25) !important;
+                background-color: var(--surface-hover) !important;
+            }}
+        }}
+        div.st-key-demo_executive_bec button:active,
+        [data-testid="stBaseButton-demo_executive_bec"]:active {{
+            transform: translateY(0) scale(0.98) !important;
+            box-shadow: 0 1px 3px rgba(166, 120, 255, 0.15) !important;
+        }}
+
+        /* Accessibility: prefers-reduced-motion rule */
+        @media (prefers-reduced-motion: reduce) {{
+            div.st-key-demo_legitimate button,
+            [data-testid="stBaseButton-demo_legitimate"],
+            div.st-key-demo_credential_phishing button,
+            [data-testid="stBaseButton-demo_credential_phishing"],
+            div.st-key-demo_executive_bec button,
+            [data-testid="stBaseButton-demo_executive_bec"] {{
+                transition: none !important;
+                transform: none !important;
+            }}
+            div.st-key-demo_legitimate button:hover,
+            div.st-key-demo_credential_phishing button:hover,
+            div.st-key-demo_executive_bec button:hover,
+            div.st-key-demo_legitimate button:active,
+            div.st-key-demo_credential_phishing button:active,
+            div.st-key-demo_executive_bec button:active {{
+                transform: none !important;
+            }}
+        }}
+
+        /* ================================================================
            EXPANDERS
            ================================================================ */
         .streamlit-expanderHeader,
@@ -659,7 +745,7 @@ def apply_theme():
             border:           1px solid var(--border-primary) !important;
             color:            var(--text-primary) !important;
         }}
-        
+
         [data-testid="stMetricValue"] {{
             color:       var(--text-primary) !important;
             font-size:   1.8rem !important;

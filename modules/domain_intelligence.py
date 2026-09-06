@@ -40,7 +40,7 @@ def get_dns_records(domain: str, record_type: str) -> list:
             return [b"".join(r.strings).decode('utf-8', errors='ignore') for r in answers]
         elif record_type in ['A', 'AAAA']:
             return [r.to_text() for r in answers]
-    except Exception:
+    except (dns.exception.DNSException, ValueError, TypeError, AttributeError):
         pass
     return []
 

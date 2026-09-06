@@ -1,0 +1,21 @@
+From: "Managing Director" <director-office@attacker.example>
+To: "Finance Team" <finance@example.test>
+Reply-To: <director-private@attacker.example>
+Return-Path: <bounces@attacker.example>
+Subject: Urgent: Confidential payment request
+Authentication-Results: mx.example.test; spf=fail; dkim=fail; dmarc=fail
+Date: Fri, 04 Sep 2026 09:30:00 +0000
+Message-ID: <bec-888@attacker.example>
+Received: from unknown.attacker.example (unknown.attacker.example [198.51.100.99])
+        by mx.example.test with ESMTPS id 30003
+        for <finance@example.test>; Fri, 04 Sep 2026 09:30:00 +0000
+Content-Type: text/plain; charset="utf-8"
+
+Hi Finance,
+
+I need an urgent wire transfer processed today for a confidential acquisition.
+Please do not discuss this with colleagues as it is secret.
+Send payment instructions and confirmation as soon as completed.
+
+Regards,
+Managing Director

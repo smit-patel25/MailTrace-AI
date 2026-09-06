@@ -58,11 +58,12 @@ def test_workflow_save_case_and_duplicate(isolate_env):
     at.run()
 
     # Click save case
-    at.button[0].click().run() # Button "Save as Case"
+    save_btn = next(b for b in at.button if "Save as Case" in b.label)
+    save_btn.click().run()
     assert "Successfully saved" in at.success[1].value
 
     # Click save case again (Simulate repeated rerun)
-    at.button[0].click().run()
+    save_btn.click().run()
 
     # Verify in Cases page that it was deduplicated (same hash)
     at.switch_page("pages/1_Cases.py")

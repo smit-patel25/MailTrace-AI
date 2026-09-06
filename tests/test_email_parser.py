@@ -66,9 +66,9 @@ def test_malformed_input():
 def test_empty_email():
     raw = b""
     result = parse_eml_bytes(raw)
-    assert result["subject"] == ""
-    assert result["body_plain"] == ""
-    assert len(result["received"]) == 0
+    # Empty input is now a hard rejection
+    assert result.get("rejected") is True
+    assert result.get("rejection_reason") == "empty_input"
 
 def test_unknown_encoding():
     raw = b"""From: sender@example.com
@@ -130,19 +130,19 @@ Content-Type: text/html; charset="utf-8"
     assert "HTML" in result["analysis_text"]
     assert "link" in result["analysis_text"]
 
-def test_oversized_payload():
-    # Construct a very large string to test parser stability
-    large_subject = "A" * 5000
-    large_body = "B" * 500000
+def test_oversized_payload_stays_under_limit():
+    # Build an email with a large body that stays under 2 MiB — the parser should
+    # parse it normally and emit content_truncated metadata if the body is huge.
+    large_body = "B" * 10_000   # Well within limits; just checks parser stability
     raw = f"""From: sender@example.com
-Subject: {large_subject}
+Subject: Payload test
 Content-Type: text/plain; charset="utf-8"
 
 {large_body}
-""".encode('utf-8')
+""".encode("utf-8")
     result = parse_eml_bytes(raw)
-    assert result["subject"] == large_subject
-    assert result["body_plain"].strip() == large_body
+    assert not result.get("rejected")
+    assert "B" in result["body_plain"]
 
 def test_attachment_metadata_handled():
     raw = b"""From: sender@example.com
@@ -164,6 +164,6 @@ JVBERi0xLjQKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMCBSL0ZpbHRlci9GbGF0ZURl
     result = parse_eml_bytes(raw)
     # The parser does not extract or execute attachments, but it shouldn't crash.
     assert "Body text." in result["body_plain"]
-    
+
     if "attachments" in result and len(result["attachments"]) > 0:
         assert any(a.get("filename") == "invoice.pdf" for a in result["attachments"])

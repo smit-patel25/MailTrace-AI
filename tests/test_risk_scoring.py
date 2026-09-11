@@ -43,13 +43,34 @@ def test_proxy_hosting_infrastructure():
     assert res["component_scores"]["infrastructure_risk"] == 20
 
 def test_recognized_infra_google():
+    # Legitimate cases
+    cases = [
+        "from google.com (google.com [1.1.1.1])", # original fixture
+        "from google.com [1.1.1.1]",
+        "from mail-sor.google.com [1.1.1.1]",
+        "from MAIL.GOOGLE.COM [1.1.1.1]",
+        "from googlemail.com. [1.1.1.1]",
+        "from mail.google.com (relay [1.1.1.1]) by mx.example.test", # proper association
+        "from google.com (relay.by.example [1.1.1.1]) by mx.example.test", # 'by' inside parens
+        r"from google.com (relay \(nested\) [1.1.1.1]) by mx.example.test", # legitimate escaped comment
+        "from google.com\r\n\t([1.1.1.1]) by mx.example.test", # folded header
+    ]
+    for case in cases:
+        res = calculate_fraud_score(
+            header_analysis={}, content_analysis={},
+            relay_analysis={"probable_origin_ip": "1.1.1.1", "original_received_headers": [case]},
+            geolocation_result={"available": True, "proxy": True, "hosting": True, "location": {"org": "Google LLC"}}
+        )
+        assert res["component_scores"]["infrastructure_risk"] == 0, f"Failed legit case: {case}"
+        assert any("Recognized email delivery infrastructure" in r for r in res["top_reasons"])
+
+def test_recognized_infra_ipv6():
     res = calculate_fraud_score(
         header_analysis={}, content_analysis={},
-        relay_analysis={"probable_origin_ip": "1.1.1.1", "original_received_headers": ["from google.com (google.com [1.1.1.1])"]},
+        relay_analysis={"probable_origin_ip": "2001:db8::1", "original_received_headers": ["from google.com [2001:0db8:0000:0000:0000:0000:0000:0001]"]},
         geolocation_result={"available": True, "proxy": True, "hosting": True, "location": {"org": "Google LLC"}}
     )
     assert res["component_scores"]["infrastructure_risk"] == 0
-    assert any("Recognized email delivery infrastructure" in r for r in res["top_reasons"])
 
 def test_recognized_infra_microsoft():
     res = calculate_fraud_score(
@@ -66,6 +87,89 @@ def test_recognized_infra_amazon():
         geolocation_result={"available": True, "proxy": True, "hosting": True, "location": {"org": "Amazon.com"}}
     )
     assert res["component_scores"]["infrastructure_risk"] == 0
+
+def test_recognized_infra_deceptive_hostname():
+    # Deceptive cases (should NOT be recognized)
+    cases = [
+        "from google.com.attacker.test [1.1.1.1]",
+        "from googlemail.com.attacker.test [1.1.1.1]",
+        "from outlook.com.attacker.test [1.1.1.1]",
+        "from amazonses.com.attacker.test [1.1.1.1]",
+        "from attacker-google.com [1.1.1.1]",
+        "from google.com@attacker.test [1.1.1.1]",
+        "from attacker.test/google.com [1.1.1.1]",
+        "from attacker.test (google.com [1.1.1.1])",
+        "from attacker.test [1.1.1.1] google.com", # Trusted text elsewhere
+        "from google.com [11.1.1.10]", # Probable IP is 1.1.1.1, header has 11.1.1.10
+        "from ---.com [1.1.1.1]", # Malformed hostname
+        "from [1.1.1.1]", # Missing hostname
+        "from google.com [8.8.8.8] by mx.attacker.test [1.1.1.1]", # IP only in 'by' clause
+        "from google.com by mx.attacker.test [1.1.1.1]", # IP appears after 'by' clause
+        "(from google.com [1.1.1.1]) by mx.attacker.test",
+        "from google.com (relay) by mx.example.test ; [1.1.1.1]", # IP after top-level semicolon
+        r"from google.com \by mx.attacker.test [1.1.1.1]", # backslash before by at top level
+        "from google.com (relay)by mx.attacker.test [1.1.1.1]", # by immediately after closing paren
+        "from google.com (relay); [1.1.1.1]", # IP only after top-level semicolon (no by)
+    ]
+    for case in cases:
+        res = calculate_fraud_score(
+            header_analysis={}, content_analysis={},
+            relay_analysis={"probable_origin_ip": "1.1.1.1", "original_received_headers": [case]},
+            geolocation_result={"available": True, "proxy": True, "hosting": True, "location": {"org": "Google LLC"}}
+        )
+        assert res["component_scores"]["infrastructure_risk"] == 20, f"Failed deceptive case: {case}"
+
+def test_recognized_infra_invalid_ip_and_headers():
+    invalid_ips = ["invalid-ip", None, [], {}, b"1.1.1.1"]
+    for invalid_ip in invalid_ips:
+        res = calculate_fraud_score(
+            header_analysis={}, content_analysis={},
+            relay_analysis={"probable_origin_ip": invalid_ip, "original_received_headers": ["from google.com [1.1.1.1]"]},
+            geolocation_result={"available": True, "proxy": True, "hosting": True, "location": {"org": "Google LLC"}}
+        )
+        assert res["component_scores"]["infrastructure_risk"] == 20
+
+    # Specifically test integer 123
+    res = calculate_fraud_score(
+        header_analysis={}, content_analysis={},
+        relay_analysis={"probable_origin_ip": 123, "original_received_headers": ["from google.com [0.0.0.123]"]},
+        geolocation_result={"available": True, "proxy": True, "hosting": True, "location": {"org": "Google LLC"}}
+    )
+    assert res["component_scores"]["infrastructure_risk"] == 20
+
+    invalid_headers = [None, 123, b"from google.com [1.1.1.1]", "", []]
+    for invalid_header in invalid_headers:
+        res = calculate_fraud_score(
+            header_analysis={}, content_analysis={},
+            relay_analysis={"probable_origin_ip": "1.1.1.1", "original_received_headers": [invalid_header]},
+            geolocation_result={"available": True, "proxy": True, "hosting": True, "location": {"org": "Google LLC"}}
+        )
+        assert res["component_scores"]["infrastructure_risk"] == 20
+
+def test_recognized_infra_provider_specific_deception():
+    # Microsoft Corp + deceptive outlook hostname
+    res = calculate_fraud_score(
+        header_analysis={}, content_analysis={},
+        relay_analysis={"probable_origin_ip": "1.1.1.1", "original_received_headers": ["from outlook.com.attacker.test [1.1.1.1]"]},
+        geolocation_result={"available": True, "proxy": True, "hosting": True, "location": {"org": "Microsoft Corporation"}}
+    )
+    assert res["component_scores"]["infrastructure_risk"] == 20
+
+    # Amazon.com + deceptive amazonses hostname
+    res = calculate_fraud_score(
+        header_analysis={}, content_analysis={},
+        relay_analysis={"probable_origin_ip": "1.1.1.1", "original_received_headers": ["from amazonses.com.attacker.test [1.1.1.1]"]},
+        geolocation_result={"available": True, "proxy": True, "hosting": True, "location": {"org": "Amazon.com"}}
+    )
+    assert res["component_scores"]["infrastructure_risk"] == 20
+
+    # Google LLC + deceptive google hostname
+    res = calculate_fraud_score(
+        header_analysis={}, content_analysis={},
+        relay_analysis={"probable_origin_ip": "1.1.1.1", "original_received_headers": ["from google.com.attacker.test [1.1.1.1]"]},
+        geolocation_result={"available": True, "proxy": True, "hosting": True, "location": {"org": "Google LLC"}}
+    )
+    assert res["component_scores"]["infrastructure_risk"] == 20
 
 def test_recognized_infra_forged_hostname():
     # Hostname says google.com, but org is EvilHost

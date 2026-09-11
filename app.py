@@ -818,49 +818,6 @@ if raw_bytes is not None:
                 else:
                     st.info("No HTML body found.")
 
-            # Attachment Forensics
-            section_header("Attachment Forensics", "cyan")
-            st.caption("ℹ️ Attachment assessment is based on metadata only and is not a malware scan.")
-
-            if attachment_analysis.get("attachment_count", 0) == 0:
-                st.info("No attachments detected.")
-            else:
-                for att in attachment_analysis.get("attachments", []):
-                    r_level = att["risk_level"]
-                    r_color = "var(--danger)" if r_level == "High" else ("var(--warning)" if r_level == "Review" else "var(--success)")
-                    r_icon = "🚨 High Risk" if r_level == "High" else ("⚠️ Review Required" if r_level == "Review" else "✅ Low Risk")
-
-                    reasons_html = ""
-                    if att["reasons"]:
-                        reasons_html = "<div style='margin-top: 0.5rem;'><strong>Indicators:</strong><ul style='margin-top: 0.25rem; margin-bottom: 0; padding-left: 1.2rem;'>"
-                        for r in att["reasons"]:
-                            reasons_html += f"<li>{html.escape(r)}</li>"
-                        reasons_html += "</ul></div>"
-                    else:
-                        reasons_html = "<div style='margin-top: 0.5rem; color: var(--text-muted);'><small>No suspicious metadata indicators detected.</small></div>"
-
-                    st.markdown(f"""
-                    <div class="soc-card" style="border-left: 4px solid {r_color}; margin-bottom: 1rem;">
-                        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.5rem;">
-                            <div style="word-break: break-all; max-width: 75%;">
-                                <h4 style="margin: 0; word-break: break-all;">📎 {html.escape(att['filename'])}</h4>
-                            </div>
-                            <div>
-                                <span style="font-weight: 600; font-size: 0.85rem; color: {r_color}; background: var(--surface-elevated); padding: 0.25rem 0.6rem; border-radius: var(--radius-sm); border: 1px solid var(--border-primary);">
-                                    {r_icon}
-                                </span>
-                            </div>
-                        </div>
-                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.5rem; font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.5rem;">
-                            <div><strong>Declared Type:</strong> <code>{html.escape(att['content_type'])}</code></div>
-                            <div><strong>Size:</strong> {html.escape(att['human_size'])} ({att['size']} bytes)</div>
-                        </div>
-                        <div style="font-size: 0.85rem; color: var(--text-muted); word-break: break-all; margin-bottom: 0.5rem;">
-                            <strong>SHA-256:</strong> <code style="word-break: break-all;">{html.escape(att['sha256'])}</code>
-                        </div>
-                        {reasons_html}
-                    </div>
-                    """, unsafe_allow_html=True)
 
             # Show any defects if present
             if parsed_data.get("defects"):

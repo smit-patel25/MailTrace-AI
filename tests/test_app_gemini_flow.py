@@ -1,7 +1,39 @@
+import os
+import re
 import pytest
 from unittest.mock import patch, MagicMock
 from modules.risk_scoring import calculate_fraud_score
 import hashlib
+
+_APP_PY = os.path.join(os.path.dirname(__file__), "..", "app.py")
+
+
+def test_attachment_forensics_rendered_exactly_once():
+    """UI regression: app.py must call section_header("Attachment Forensics", ...)
+    exactly once so the section is never duplicated on the Analyze Email page,
+    regardless of whether the email has attachments or not.
+    """
+    with open(_APP_PY, encoding="utf-8") as fh:
+        source = fh.read()
+
+    # Count non-comment occurrences of the section_header call for Attachment Forensics.
+    # Strip single-line comments first to avoid matching commented-out dead code.
+    non_comment_lines = [
+        line for line in source.splitlines()
+        if not line.lstrip().startswith("#")
+    ]
+    source_no_comments = "\n".join(non_comment_lines)
+
+    occurrences = re.findall(
+        r'section_header\s*\(\s*["\']Attachment Forensics["\']',
+        source_no_comments,
+    )
+    assert len(occurrences) == 1, (
+        f"Expected exactly 1 section_header('Attachment Forensics', ...) call in app.py, "
+        f"found {len(occurrences)}: {occurrences}"
+    )
+
+
 
 def get_hash(content):
     return hashlib.sha256(content).hexdigest()

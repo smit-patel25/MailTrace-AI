@@ -39,6 +39,7 @@ def test_credential_request_html():
     }
     res = analyze_content(email)
     assert "credential request" in res["categories_detected"]
+    assert isinstance(res["original_urls"], list)
     assert "http://phish.com" in res["original_urls"]
     assert "hxxp://phish[.]com" in res["defanged_urls"]
 

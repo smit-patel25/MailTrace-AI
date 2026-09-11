@@ -1,3 +1,133 @@
+import ipaddress
+import re
+from modules.relay_analyzer import extract_and_classify_ips
+
+def _is_valid_dns_hostname(hostname):
+    if not hostname:
+        return None
+    hostname = hostname.lower()
+    if hostname.endswith('.'):
+        hostname = hostname[:-1]
+    if not hostname or len(hostname) > 253:
+        return None
+
+    labels = hostname.split('.')
+    if not labels or len(labels) > 127:
+        return None
+
+    for label in labels:
+        if not label or len(label) > 63:
+            return None
+        if label.startswith('-') or label.endswith('-'):
+            return None
+        if not re.fullmatch(r'[a-z0-9-]+', label):
+            return None
+
+    return hostname
+
+def _extract_from_hostname(header, probable_ip_str):
+    if type(header) is not str or not header.strip():
+        return None
+
+    if type(probable_ip_str) is not str or not probable_ip_str.strip():
+        return None
+
+    try:
+        canonical_probable = ipaddress.ip_address(probable_ip_str)
+    except (ValueError, TypeError):
+        return None
+
+    match = re.match(r'(?i)^\s*from\s+(\S+)', header)
+    if not match:
+        return None
+
+    hostname_token = match.group(1)
+
+    i = 0
+    length = len(header)
+    in_parens = 0
+    in_brackets = 0
+    end_of_from = length
+
+    while i < length:
+        c = header[i]
+
+        # Backslash escaping is only valid inside RFC 5321 comments (parentheses).
+        # A top-level backslash is not a valid Received-header construct; reject it
+        # conservatively so an attacker cannot use it to hide a `by` keyword.
+        if c == '\\':
+            if in_parens > 0:
+                # consume the next character inside a comment
+                i += 2
+                continue
+            else:
+                # unsupported top-level escape — reject the whole header
+                return None
+
+        if c == '(':
+            in_parens += 1
+        elif c == ')':
+            in_parens -= 1
+            if in_parens < 0:
+                return None
+            # After closing a top-level comment, check whether `by` follows
+            # immediately (no whitespace separator), e.g. "(relay)by ...".
+            if in_parens == 0 and in_brackets == 0:
+                j = i + 1
+                if j + 1 < length and header[j].lower() == 'b' and header[j + 1].lower() == 'y':
+                    if j + 2 == length or header[j + 2].isspace() or header[j + 2] in '([;':
+                        end_of_from = i + 1  # include the ')' itself but stop before 'by'
+                        break
+        elif c == '[':
+            in_brackets += 1
+        elif c == ']':
+            in_brackets -= 1
+            if in_brackets < 0:
+                return None
+            # Same check after a closing bracket at top level.
+            if in_parens == 0 and in_brackets == 0:
+                j = i + 1
+                if j + 1 < length and header[j].lower() == 'b' and header[j + 1].lower() == 'y':
+                    if j + 2 == length or header[j + 2].isspace() or header[j + 2] in '([;':
+                        end_of_from = i + 1
+                        break
+        elif in_parens == 0 and in_brackets == 0:
+            if c == ';':
+                end_of_from = i
+                break
+
+            # Detect whitespace-separated `by` at top level.
+            if c.lower() == 'b' and i > 0 and header[i - 1].isspace():
+                if i + 1 < length and header[i + 1].lower() == 'y':
+                    if i + 2 == length or header[i + 2].isspace() or header[i + 2] in '([;':
+                        end_of_from = i
+                        break
+        i += 1
+
+    if in_parens != 0 or in_brackets != 0:
+        return None
+
+    from_clause = header[:end_of_from]
+
+    extracted = extract_and_classify_ips(from_clause)
+
+    found = False
+    for item in extracted:
+        ip_str = item.get('ip')
+        if not ip_str:
+            continue
+        try:
+            if ipaddress.ip_address(ip_str) == canonical_probable:
+                found = True
+                break
+        except (ValueError, TypeError):
+            continue
+
+    if not found:
+        return None
+
+    return _is_valid_dns_hostname(hostname_token)
+
 def calculate_fraud_score(
     header_analysis,
     content_analysis,
@@ -38,21 +168,23 @@ def calculate_fraud_score(
             # Determine recognized infrastructure
             probable_ip = relay_analysis.get("probable_origin_ip") if relay_analysis else None
             received_headers = relay_analysis.get("original_received_headers", []) if relay_analysis else []
-            matched_hostname = ""
+            matched_hostname = None
             for header in received_headers:
-                if probable_ip and probable_ip in header:
-                    matched_hostname = header.lower()
+                extracted_host = _extract_from_hostname(header, probable_ip)
+                if extracted_host:
+                    matched_hostname = extracted_host
                     break
 
             org_asn = str(geolocation_result.get("location", {}).get("org", "")).lower() + " " + str(geolocation_result.get("location", {}).get("as", "")).lower()
 
             is_recognized_infra = False
-            if "google" in org_asn and ("google.com" in matched_hostname or "googlemail.com" in matched_hostname):
-                is_recognized_infra = True
-            elif "microsoft" in org_asn and ("outlook.com" in matched_hostname):
-                is_recognized_infra = True
-            elif "amazon" in org_asn and ("amazonses.com" in matched_hostname):
-                is_recognized_infra = True
+            if matched_hostname:
+                if "google" in org_asn and (matched_hostname == "google.com" or matched_hostname.endswith(".google.com") or matched_hostname == "googlemail.com" or matched_hostname.endswith(".googlemail.com")):
+                    is_recognized_infra = True
+                elif "microsoft" in org_asn and (matched_hostname == "outlook.com" or matched_hostname.endswith(".outlook.com")):
+                    is_recognized_infra = True
+                elif "amazon" in org_asn and (matched_hostname == "amazonses.com" or matched_hostname.endswith(".amazonses.com")):
+                    is_recognized_infra = True
 
             if is_recognized_infra:
                 top_reasons.append("Recognized email delivery infrastructure — neutral signal. Note: The IP is a mail relay, not necessarily the sender's device or physical origin.")

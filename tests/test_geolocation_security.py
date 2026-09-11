@@ -30,6 +30,7 @@ Covers all 24 requirements from the security spec:
 
 import pytest
 import json
+import urllib.parse
 from unittest.mock import patch, Mock, call
 from modules.geolocation import geolocate_ip
 from modules.risk_scoring import calculate_fraud_score
@@ -256,7 +257,11 @@ def test_req11_ipv6_canonicalized(mock_get):
     geolocate_ip("2606:4700:4700::1111")
     url_used = mock_get.call_args[0][0]
     # Must use canonical representation (lowercase, collapsed zeros)
-    assert "free.freeipapi.com" in url_used
+    _parsed = urllib.parse.urlsplit(url_used)
+    assert _parsed.scheme == "https"
+    assert _parsed.hostname == "free.freeipapi.com"
+    assert _parsed.username is None
+    assert _parsed.password is None
     assert "%" not in url_used  # No URL-encoded chars from injection
 
 

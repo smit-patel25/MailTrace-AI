@@ -37,6 +37,7 @@ def extract_safe_data(case_data):
         "verdict": case_data.get("verdict", "Unknown"),
         "confidence": case_data.get("confidence", "Unknown"),
         "component_scores": f_score.get("component_scores", {}),
+        "scoring_version": f_score.get("scoring_version", "1.0"),
         "defanged_urls": content_res.get("defanged_urls", []),
         "key_indicators": [],
         "auth_status": header_res.get("reported_auth_statuses", {}),
@@ -142,9 +143,16 @@ th {{ background-color: #f2f2f2; width: 30%; }}
     html_content += f"""<tr><th>Risk Level</th><td>{html.escape(str(data['risk_level']))}</td></tr>
 <tr><th>Verdict</th><td>{html.escape(str(data['verdict']))}</td></tr>
 <tr><th>Confidence</th><td>{html.escape(str(data['confidence']))}</td></tr>
+<tr><th>Scoring Version</th><td>{html.escape(str(data['scoring_version']))}</td></tr>
 </table>
 
+<h2>Component Scores</h2>
+<table>
 """
+    for k, v in data.get('component_scores', {}).items():
+        html_content += f"<tr><th>{html.escape(str(k))}</th><td>{html.escape(str(v))}</td></tr>\n"
+    html_content += "</table>\n\n"
+
     if data['key_indicators']:
         html_content += "<h2>Key Indicators</h2><ul>"
         for ind in data['key_indicators']:
@@ -216,7 +224,10 @@ def generate_pdf_report(case_data) -> bytes:
     assess_lines.extend([
         f"<b>Risk Level:</b> {data['risk_level']}",
         f"<b>Verdict:</b> {data['verdict']}",
+        f"<b>Scoring Version:</b> {data['scoring_version']}"
     ])
+    for k, v in data.get('component_scores', {}).items():
+        assess_lines.append(f"<b>{k}:</b> {v}")
     for line in assess_lines:
         elements.append(Paragraph(line, body_style))
     elements.append(Spacer(1, 12))

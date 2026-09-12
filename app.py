@@ -252,7 +252,8 @@ if raw_bytes is not None:
 
             fraud_score = calculate_fraud_score(
                 analysis, content_analysis, relay_analysis,
-                geo_res, domain_res, gemini_res
+                geo_res, domain_res, gemini_res,
+                attachment_analysis=attachment_analysis
             )
 
             # Threat Assessment
@@ -311,7 +312,7 @@ if raw_bytes is not None:
                 with st.expander("View technical scoring reasons"):
                     st.write("No significant risk reasons detected.")
 
-            c1, c2, c3, c4 = st.columns(4)
+            c1, c2, c3 = st.columns(3)
             c_scores = fraud_score["component_scores"]
             with c1:
                 st.markdown(f'<div class="component-card accent-blue" title="Checks sender-domain consistency and reported SPF, DKIM, and DMARC results."><div class="component-title">Header & Auth</div><div class="component-score">{c_scores["header_risk"]} / 35</div></div>', unsafe_allow_html=True)
@@ -319,8 +320,12 @@ if raw_bytes is not None:
                 st.markdown(f'<div class="component-card accent-amber" title="Looks for suspicious wording, impersonation, urgency, credential requests, and business-email-compromise patterns."><div class="component-title">Content & BEC</div><div class="component-score">{c_scores["content_risk"]} / 25</div></div>', unsafe_allow_html=True)
             with c3:
                 st.markdown(f'<div class="component-card accent-teal" title="Reviews the probable email-delivery infrastructure. It does not identify a person’s physical location."><div class="component-title">Infrastructure</div><div class="component-score">{c_scores["infrastructure_risk"]} / 20</div></div>', unsafe_allow_html=True)
+
+            c4, c5 = st.columns(2)
             with c4:
                 st.markdown(f'<div class="component-card accent-violet" title="Examines links and domain-related signals for suspicious characteristics."><div class="component-title">URL, Domain & Identity</div><div class="component-score">{c_scores["domain_risk"]} / 20</div></div>', unsafe_allow_html=True)
+            with c5:
+                st.markdown(f'<div class="component-card accent-rose" title="Assesses attachment metadata for executables, macros, and anomalies."><div class="component-title">Attachments</div><div class="component-score">{c_scores.get("attachment_risk", 0)} / 50</div></div>', unsafe_allow_html=True)
 
             # (Original Top Reasons block replaced with new design)
             if fraud_score["unavailable_sources"]:

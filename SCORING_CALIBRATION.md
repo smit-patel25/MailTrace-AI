@@ -1,4 +1,10 @@
-# Scoring Calibration Analysis (Version 1.1)
+# Scoring Calibration Analysis (Version 1.2)
+
+## Scoring Version 1.2 Update
+
+MailTrace AI now uses Scoring Version 1.2, which introduces the following changes:
+- **Attachment Risk Component**: Evaluates email attachments based on metadata. Points awarded: 0 (Normal), 15 (Review required), or 50 (High risk/Executable/Deception).
+- **Score Cap**: The total fraud score is strictly capped at 100 points.
 
 ## Overview
 This document evaluates the MailTrace AI scoring engine against a variety of legitimate, spam, and severe phishing email fixtures.

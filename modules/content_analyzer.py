@@ -239,19 +239,6 @@ def analyze_content(parsed_email: dict) -> dict:
                 total_points += pts
                 added_explanations.add(explanation)
 
-    # --- Attachment extension checks ---
-    suspicious_exts = {".exe", ".scr", ".vbs", ".js", ".bat", ".cmd", ".wsf", ".ps1", ".zip", ".rar", ".iso"}
-    for att in parsed_email.get("attachments", []):
-        fname = att.get("filename", "").lower()
-        if any(fname.endswith(ext) for ext in suspicious_exts):
-            indicators.append({
-                "severity": "high",
-                "explanation": f"Suspicious attachment extension: {fname}",
-                "points": 40,
-            })
-            categories.add("suspicious attachment")
-            total_points += 40
-
     # --- URL extraction (bounded) ---
     urls, url_stats = extract_urls(
         parsed_email.get("analysis_text", ""),

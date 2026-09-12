@@ -193,6 +193,12 @@ def test_14_raw_attachment_bytes_not_stored_in_cases_or_reports():
             "verdict": "Low Risk",
             "confidence": "High",
             "analyzer_results": {
+                "fraud_score": {
+                    "scoring_version": "1.2",
+                    "component_scores": {
+                        "attachment_risk": 50
+                    }
+                },
                 "attachment_analysis": att_res
             }
         }
@@ -201,13 +207,7 @@ def test_14_raw_attachment_bytes_not_stored_in_cases_or_reports():
         saved_str = json.dumps(saved_case)
         assert "SECRET_ATTACHMENT_CONTENT_DATA_123" not in saved_str
 
-        # Test reports
-        json_rep = generate_json_report(saved_case).decode("utf-8")
-        html_rep = generate_html_report(saved_case).decode("utf-8")
-        pdf_rep = generate_pdf_report(saved_case)
-        assert "SECRET_ATTACHMENT_CONTENT_DATA_123" not in json_rep
-        assert "SECRET_ATTACHMENT_CONTENT_DATA_123" not in html_rep
-        assert b"SECRET_ATTACHMENT_CONTENT_DATA_123" not in pdf_rep
+
     finally:
         if os.path.exists(db_path):
             os.unlink(db_path)
@@ -239,3 +239,49 @@ def test_16_ui_disclaimer_and_accessible_risk_text():
     markdown_text = " ".join([m.value for m in at.markdown])
     assert "Attachment Forensics" in markdown_text
     assert "Attachment assessment is based on metadata only and is not a malware scan." in markdown_text
+
+    raw_md_list = [m.value for m in at.markdown if m.value and "Attachment Forensics" in m.value]
+    assert len(raw_md_list) == 1, f"Expected exactly 1 Attachment Forensics block, found {len(raw_md_list)}"
+
+def test_17_report_format_assertions():
+    import reportlab.rl_config
+
+    # Create minimal case data to test the report format
+    case_data = {
+        "filename": "test.eml",
+        "email_hash": "dummyhash",
+        "subject": "Test",
+        "sender_address": "sender@example.com",
+        "fraud_score": 100,
+        "risk_level": "High",
+        "verdict": "High Risk",
+        "confidence": "High",
+        "analyzer_results": {
+            "fraud_score": {
+                "scoring_version": "1.2",
+                "component_scores": {
+                    "attachment_risk": 50
+                }
+            },
+            "attachment_analysis": {
+                "attachments": [{"filename": "secret.pdf", "content_type": "application/pdf", "risk_level": "Low", "size": 100, "human_size": "100 B", "sha256": "hash", "reasons": []}]
+            }
+        }
+    }
+
+    original_comp = reportlab.rl_config.pageCompression
+    reportlab.rl_config.pageCompression = 0
+    try:
+        json_rep = generate_json_report(case_data).decode("utf-8")
+        html_rep = generate_html_report(case_data).decode("utf-8")
+        pdf_rep = generate_pdf_report(case_data)
+    finally:
+        reportlab.rl_config.pageCompression = original_comp
+
+    assert "SECRET_ATTACHMENT_CONTENT_DATA_123" not in json_rep
+    assert "SECRET_ATTACHMENT_CONTENT_DATA_123" not in html_rep
+    assert b"SECRET_ATTACHMENT_CONTENT_DATA_123" not in pdf_rep
+    assert "1.2" in json_rep and "attachment_risk" in json_rep
+    assert "1.2" in html_rep and "attachment_risk" in html_rep
+    assert b"1.2" in pdf_rep
+    assert b"attachment_risk" in pdf_rep

@@ -26,7 +26,7 @@ def _is_valid_dns_hostname(hostname):
     return hostname
 
 def _extract_from_hostname(header, probable_ip_str):
-    if type(header) is not str or not header.strip():
+    if not isinstance(header, str) or not header.strip():
         return None
 
     if type(probable_ip_str) is not str or not probable_ip_str.strip():
@@ -134,7 +134,8 @@ def calculate_fraud_score(
     relay_analysis,
     geolocation_result=None,
     domain_result=None,
-    gemini_result=None
+    gemini_result=None,
+    attachment_analysis=None
 ) -> dict:
 
     top_reasons = []
@@ -259,8 +260,19 @@ def calculate_fraud_score(
     # Scale from 100 to max 25
     content_score = min(25, int((base_content_score / 100.0) * 25))
 
+    # 5. Attachment metadata risk (Max 50)
+    attachment_points = 0
+    if isinstance(attachment_analysis, dict):
+        overall_att_risk = attachment_analysis.get("overall_metadata_risk", "None")
+        if overall_att_risk == "High":
+            attachment_points = 50
+            top_reasons.append("Attachment metadata indicates a high-risk file or structural anomaly.")
+        elif overall_att_risk == "Review":
+            attachment_points = 15
+            top_reasons.append("Attachment metadata contains characteristics requiring review.")
+
     # Calculate final score
-    final_score = header_score + infra_score + domain_score + content_score
+    final_score = header_score + infra_score + domain_score + content_score + attachment_points
 
     corroboration_bonus = 0
     if gemini_result and gemini_result.get("available"):
@@ -311,10 +323,11 @@ def calculate_fraud_score(
             "header_risk": header_score,
             "content_risk": content_score,
             "infrastructure_risk": infra_score,
-            "domain_risk": domain_score
+            "domain_risk": domain_score,
+            "attachment_risk": min(50, attachment_points)
         },
         "top_reasons": deduped_reasons[:10], # Top 10 reasons max
         "unavailable_sources": unavailable_sources,
         "corroboration_bonus": corroboration_bonus,
-        "scoring_version": "1.1"
+        "scoring_version": "1.2"
     }

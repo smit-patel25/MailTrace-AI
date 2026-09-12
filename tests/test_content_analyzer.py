@@ -89,20 +89,6 @@ def test_fake_invoice():
     res = analyze_content(email)
     assert "fake invoice" in res["categories_detected"]
 
-def test_suspicious_attachments():
-    email = {
-        "subject": "Here is the file",
-        "analysis_text": "Attached.",
-        "body_plain": "Attached.",
-        "attachments": [
-            {"filename": "document.pdf", "content_type": "application/pdf"},
-            {"filename": "payload.exe", "content_type": "application/x-msdownload"}
-        ]
-    }
-    res = analyze_content(email)
-    assert "suspicious attachment" in res["categories_detected"]
-    assert res["rule_content_score"] >= 40
-
 def test_empty_content():
     email = {}
     res = analyze_content(email)

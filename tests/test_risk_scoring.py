@@ -1,5 +1,8 @@
 import pytest
+from email.message import EmailMessage
+from modules.attachment_analyzer import analyze_attachments
 from modules.risk_scoring import calculate_fraud_score
+from modules.email_parser import parse_eml_bytes
 
 def test_legitimate_email():
     res = calculate_fraud_score(
@@ -320,4 +323,168 @@ def test_corroboration_bonus_cap_at_100():
         gemini_result={"available": True, "nlp_risk_score": 100, "threat_category": "Phishing"}
     )
     assert res["corroboration_bonus"] == 30
+    assert res["final_score"] == 100
+
+
+
+
+def _run_attachment_pipeline(ext, mimetype, filename=None):
+    msg = EmailMessage()
+    msg['Subject'] = 'Test'
+    msg['From'] = 'sender@example.com'
+    msg.set_content('Body')
+    fname = filename if filename else f'file{ext}'
+    msg.add_attachment(b'123', maintype=mimetype.split('/')[0], subtype=mimetype.split('/')[1], filename=fname)
+    parsed = parse_eml_bytes(msg.as_bytes())
+    att_analysis = analyze_attachments(parsed)
+    return calculate_fraud_score({}, {}, {}, attachment_analysis=att_analysis)
+
+def test_pipeline_normal_pdf():
+    res = _run_attachment_pipeline('.pdf', 'application/pdf')
+    assert res['component_scores']['attachment_risk'] == 0
+
+def test_pipeline_normal_docx():
+    res = _run_attachment_pipeline('.docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+    assert res['component_scores']['attachment_risk'] == 0
+
+def test_pipeline_ordinary_zip():
+    res = _run_attachment_pipeline('.zip', 'application/zip')
+    assert res['component_scores']['attachment_risk'] == 15
+
+def test_pipeline_executable():
+    res = _run_attachment_pipeline('.exe', 'application/x-msdownload')
+    assert res['component_scores']['attachment_risk'] == 50
+    assert res['risk_level'] in ['High', 'Critical']
+
+def test_pipeline_double_extension():
+    res = _run_attachment_pipeline('.pdf.exe', 'application/octet-stream', 'invoice.pdf.exe')
+    assert res['component_scores']['attachment_risk'] == 50
+
+def test_pipeline_mime_mismatch():
+    res = _run_attachment_pipeline('.pdf', 'application/x-msdownload', 'invoice.pdf')
+    assert res['component_scores']['attachment_risk'] == 15
+
+def test_pipeline_macro_enabled():
+    res = _run_attachment_pipeline('.docm', 'application/vnd.ms-word.document.macroenabled.12')
+    assert res['component_scores']['attachment_risk'] == 50
+
+def test_attachment_risk_omitted_is_backward_compatible():
+    res = calculate_fraud_score({}, {}, {})
+    assert res['component_scores']['attachment_risk'] == 0
+
+def test_attachment_risk_no_attachments():
+    res = calculate_fraud_score({}, {}, {}, attachment_analysis={'overall_metadata_risk': 'None'})
+    assert res['component_scores']['attachment_risk'] == 0
+
+def test_attachment_risk_review():
+    res = calculate_fraud_score({}, {}, {}, attachment_analysis={'overall_metadata_risk': 'Review'})
+    assert res['component_scores']['attachment_risk'] == 15
+
+def test_attachment_risk_high():
+    res = calculate_fraud_score({}, {}, {}, attachment_analysis={'overall_metadata_risk': 'High'})
+    assert res['component_scores']['attachment_risk'] == 50
+
+def test_attachment_risk_malformed_data():
+    res1 = calculate_fraud_score({}, {}, {}, attachment_analysis=[])
+    res2 = calculate_fraud_score({}, {}, {}, attachment_analysis='High')
+    res3 = calculate_fraud_score({}, {}, {}, attachment_analysis=123)
+    assert res1['component_scores']['attachment_risk'] == 0
+    assert res2['component_scores']['attachment_risk'] == 0
+    assert res3['component_scores']['attachment_risk'] == 0
+
+def test_integration_relay_infrastructure_unstructured_header():
+    msg = EmailMessage()
+    msg["Received"] = "from mail.google.com (mail.google.com [1.1.1.1])"
+    parsed = parse_eml_bytes(msg.as_bytes())
+    header = parsed.get("received", [])[0]
+    assert isinstance(header, str)
+    assert type(header) is not str
+
+    geo = {
+        "available": True,
+        "proxy": True,
+        "hosting": True,
+        "location": {
+            "org": "Google LLC",
+            "as": "AS15169 Google LLC"
+        }
+    }
+
+    res = calculate_fraud_score(
+        header_analysis={},
+        content_analysis={},
+        relay_analysis={"probable_origin_ip": "1.1.1.1", "original_received_headers": [header]},
+        geolocation_result=geo
+    )
+    assert res["component_scores"]["infrastructure_risk"] == 0
+
+def test_integration_relay_infrastructure_attacker_domain():
+    msg = EmailMessage()
+    msg["Received"] = "from google.com.attacker.test (attacker [1.1.1.1])"
+    parsed = parse_eml_bytes(msg.as_bytes())
+    header = parsed.get("received", [])[0]
+    assert isinstance(header, str)
+    assert type(header) is not str
+
+    geo = {
+        "available": True,
+        "proxy": True,
+        "hosting": True,
+        "location": {
+            "org": "Google LLC",
+            "as": "AS15169 Google LLC"
+        }
+    }
+
+    res = calculate_fraud_score(
+        header_analysis={},
+        content_analysis={},
+        relay_analysis={"probable_origin_ip": "1.1.1.1", "original_received_headers": [header]},
+        geolocation_result=geo
+    )
+    assert res["component_scores"]["infrastructure_risk"] == 20
+
+def test_integration_relay_infrastructure_ip_in_by_clause():
+    msg = EmailMessage()
+    msg["Received"] = "from google.com by mx.attacker.test [1.1.1.1]"
+    parsed = parse_eml_bytes(msg.as_bytes())
+    header = parsed.get("received", [])[0]
+    assert isinstance(header, str)
+    assert type(header) is not str
+
+    geo = {
+        "available": True,
+        "proxy": True,
+        "hosting": True,
+        "location": {
+            "org": "Google LLC",
+            "as": "AS15169 Google LLC"
+        }
+    }
+
+    res = calculate_fraud_score(
+        header_analysis={},
+        content_analysis={},
+        relay_analysis={"probable_origin_ip": "1.1.1.1", "original_received_headers": [header]},
+        geolocation_result=geo
+    )
+    assert res["component_scores"]["infrastructure_risk"] == 20
+
+def test_maximum_signals_capped_at_100():
+    res = calculate_fraud_score(
+        header_analysis={"indicators": [{"severity": "high", "explanation": "fail"}] * 10},
+        content_analysis={"indicators": [{"points": 100, "explanation": "fail"}, {"points": 10, "explanation": "url has excessive subdomains"}]},
+        relay_analysis={"probable_origin_ip": "1.1.1.1", "original_received_headers": ["from attacker.com [1.1.1.1]"]},
+        geolocation_result={"available": True, "proxy": True, "hosting": True, "location": {"org": "Evil"}},
+        domain_result={"available": True, "domain_age_days": 1},
+        gemini_result={"available": True, "nlp_risk_score": 100, "threat_category": "Phishing"},
+        attachment_analysis={"overall_metadata_risk": "High"}
+    )
+    assert res["component_scores"]["header_risk"] == 35
+    assert res["component_scores"]["content_risk"] == 25
+    assert res["component_scores"]["domain_risk"] == 20
+    assert res["component_scores"]["infrastructure_risk"] == 20
+    assert res["component_scores"]["attachment_risk"] == 50
+    assert res["corroboration_bonus"] == 30
+    # Total would be 35 + 25 + 20 + 20 + 50 + 30 = 180. Must be capped at 100.
     assert res["final_score"] == 100

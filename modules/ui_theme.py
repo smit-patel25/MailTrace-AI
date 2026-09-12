@@ -43,6 +43,7 @@ def apply_theme():
         --accent-violet: var(--accent-purple);
         --accent-amber:  var(--warning);
         --accent-indigo: var(--accent-blue);
+        --accent-rose:   #E11D48;
 
         --input-bg:            #101F30;
         --input-bg-disabled:   #101F30;
@@ -584,6 +585,7 @@ def apply_theme():
         .component-card.accent-teal   {{ border-top-color: var(--success) !important; }}
         .component-card.accent-violet {{ border-top-color: var(--accent-purple) !important; }}
         .component-card.accent-blue   {{ border-top-color: var(--accent-blue) !important; }}
+        .component-card.accent-rose   {{ border-top-color: var(--accent-rose) !important; }}
 
         .component-title {{
             color:          var(--text-muted) !important;

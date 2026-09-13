@@ -303,3 +303,10 @@ def test_no_emotion_class_selectors():
     src = _src()
     emotion = re.findall(r'\.(css-[a-z0-9]{5,}|st-[a-z0-9]{6,})\b', src)
     assert emotion == [], f"Emotion class selectors found: {emotion}"
+
+
+def test_mt_spacer_exists_in_app():
+    """Ensure explicit spacer elements exist between component-card rows in app.py."""
+    with open(APP_PATH, encoding="utf-8") as f:
+        app_src = f.read()
+    assert app_src.count("class='mt-spacer'") == 2

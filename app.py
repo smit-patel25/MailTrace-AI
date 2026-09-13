@@ -321,11 +321,15 @@ if raw_bytes is not None:
             with c3:
                 st.markdown(f'<div class="component-card accent-teal" title="Reviews the probable email-delivery infrastructure. It does not identify a person’s physical location."><div class="component-title">Infrastructure</div><div class="component-score">{c_scores["infrastructure_risk"]} / 20</div></div>', unsafe_allow_html=True)
 
+            st.markdown("<div class='mt-spacer' style='height: 16px;'></div>", unsafe_allow_html=True)
+
             c4, c5 = st.columns(2)
             with c4:
                 st.markdown(f'<div class="component-card accent-violet" title="Examines links and domain-related signals for suspicious characteristics."><div class="component-title">URL, Domain & Identity</div><div class="component-score">{c_scores["domain_risk"]} / 20</div></div>', unsafe_allow_html=True)
             with c5:
                 st.markdown(f'<div class="component-card accent-rose" title="Assesses attachment metadata for executables, macros, and anomalies."><div class="component-title">Attachments</div><div class="component-score">{c_scores.get("attachment_risk", 0)} / 50</div></div>', unsafe_allow_html=True)
+
+            st.markdown("<div class='mt-spacer' style='height: 16px;'></div>", unsafe_allow_html=True)
 
             # (Original Top Reasons block replaced with new design)
             if fraud_score["unavailable_sources"]:

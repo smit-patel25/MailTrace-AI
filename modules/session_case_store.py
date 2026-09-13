@@ -38,6 +38,13 @@ def save_case(case_data: dict) -> str:
     clean_data["created_at"] = datetime.now(timezone.utc).isoformat()
     clean_data["campaign_id"] = None
 
+    analyzer_results = clean_data.get("analyzer_results")
+    if isinstance(analyzer_results, dict) and "evidence_manifest" in analyzer_results:
+        from modules.evidence_integrity import update_manifest_case_id
+        analyzer_results["evidence_manifest"] = update_manifest_case_id(
+            analyzer_results["evidence_manifest"], case_id
+        )
+
     st.session_state["_cases"].append(clean_data)
     return case_id
 

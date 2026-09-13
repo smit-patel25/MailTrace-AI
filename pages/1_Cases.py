@@ -52,6 +52,30 @@ else:
             st.write(f"**Origin IP:** {case_data.get('probable_origin_ip')}")
             st.write(f"**Verdict:** {case_data.get('verdict')}")
 
+            manifest = case_data.get("analyzer_results", {}).get("evidence_manifest")
+            if manifest:
+                st.markdown("### Evidence Integrity")
+                import html
+
+                size_val = manifest.get('email_size', 0)
+                if not isinstance(size_val, int) or isinstance(size_val, bool):
+                    size_val = 0
+
+                html_block = f"""
+                <div style="font-size: 0.9rem;">
+                    <strong>Integrity Status:</strong> {html.escape(str(manifest.get('integrity_status', 'Unknown')))}<br>
+                    <strong>Email Size:</strong> {size_val:,} B<br>
+                    <strong>Analysis Timestamp:</strong> {html.escape(str(manifest.get('analysis_timestamp', 'Unknown')))}<br>
+                    <div style="margin-top: 0.5rem;">
+                        <strong>Email SHA-256:</strong><br><code style='word-break: break-all;'>{html.escape(str(manifest.get('email_sha256', 'None')))}</code>
+                    </div>
+                    <div style="margin-top: 0.5rem;">
+                        <strong>Manifest SHA-256:</strong><br><code style='word-break: break-all;'>{html.escape(str(manifest.get('manifest_sha256', 'None')))}</code>
+                    </div>
+                </div>
+                """
+                st.markdown(html_block, unsafe_allow_html=True)
+
             st.markdown("### Download Forensic Report")
             c1, c2, c3 = st.columns(3)
 

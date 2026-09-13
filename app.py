@@ -11,6 +11,7 @@ from modules.geolocation import geolocate_ip
 from modules.domain_intelligence import analyze_domain
 from modules.content_analyzer import analyze_content
 from modules.attachment_analyzer import analyze_attachments
+from modules.evidence_integrity import build_evidence_manifest
 from modules.gemini_analyzer import analyze_with_gemini
 from modules.gemini_rate_limiter import get_global_quota_manager, QuotaStatus
 from modules.risk_scoring import calculate_fraud_score
@@ -256,6 +257,19 @@ if raw_bytes is not None:
                 attachment_analysis=attachment_analysis
             )
 
+            # --- Evidence Integrity Manifest ---
+            from datetime import datetime, timezone
+            manifest_key = f"evidence_manifest_{email_hash}"
+            if manifest_key not in st.session_state:
+                st.session_state[manifest_key] = build_evidence_manifest(
+                    email_bytes=raw_bytes,
+                    filename=filename,
+                    analysis_timestamp=datetime.now(timezone.utc).isoformat(),
+                    scoring_version=fraud_score.get("scoring_version", "1.0"),
+                    attachments_metadata=attachment_analysis.get("attachments", [])
+                )
+            evidence_manifest = st.session_state[manifest_key]
+
             # Threat Assessment
             section_header("Threat Assessment", "cyan")
 
@@ -361,7 +375,8 @@ if raw_bytes is not None:
                             "relay_analysis": relay_analysis,
                             "content_analysis": content_analysis,
                             "attachment_analysis": attachment_analysis,
-                            "fraud_score": fraud_score
+                            "fraud_score": fraud_score,
+                            "evidence_manifest": evidence_manifest
                         }
                     }
 
@@ -833,5 +848,41 @@ if raw_bytes is not None:
                 with st.expander("Parser Defects (Warnings)"):
                     for d in parsed_data["defects"]:
                         st.warning(d)
+
+            # Evidence Integrity
+            section_header("Evidence Integrity", "teal")
+            st.markdown("<p style='font-size:0.85rem; color:var(--text-muted); margin-top:-8px; margin-bottom:12px;'>Integrity hashes help detect changes to analyzed evidence. They do not provide a digital signature, prove sender identity, or establish legal chain of custody. Because these hashes are not digitally signed, they must be compared with a trusted prior value. Someone able to modify both the evidence and manifest could recompute the hashes.</p>", unsafe_allow_html=True)
+
+            e_col1, e_col2 = st.columns(2)
+
+            size_val = evidence_manifest.get('email_size', 0)
+            if not isinstance(size_val, int) or isinstance(size_val, bool):
+                size_val = 0
+
+            att_list = evidence_manifest.get('attachments')
+            att_len = len(att_list) if isinstance(att_list, list) else 0
+
+            with e_col1:
+                st.markdown(f"**Integrity Status:** {html.escape(str(evidence_manifest.get('integrity_status', 'Unknown')))}")
+                st.markdown(f"**Analysis Timestamp:** {html.escape(str(evidence_manifest.get('analysis_timestamp', 'Unknown')))}")
+                st.markdown(f"**Email Size:** {size_val:,} B")
+                st.markdown(f"**Attachments Tracked:** {att_len}")
+            with e_col2:
+                st.markdown(f"**Manifest Version:** {html.escape(str(evidence_manifest.get('manifest_version', '1.0')))}")
+                st.markdown(f"**Scoring Version:** {html.escape(str(evidence_manifest.get('scoring_version', 'Unknown')))}")
+
+            html_block = f"""
+            <div class='soc-wrap' style='margin-top: 1rem; font-size: 0.85rem; background-color: var(--surface-primary); padding: 1rem; border-radius: var(--radius-md); border: 1px solid var(--border-primary);'>
+                <strong>Email SHA-256:</strong><br><code style='color: var(--text-primary); word-break: break-all;'>{html.escape(str(evidence_manifest.get('email_sha256', 'None')))}</code>
+                <div style='margin-top: 0.5rem;'><strong>Manifest SHA-256:</strong><br><code style='color: var(--accent-primary); word-break: break-all;'>{html.escape(str(evidence_manifest.get('manifest_sha256', 'None')))}</code></div>
+            </div>
+            """
+            st.markdown(html_block, unsafe_allow_html=True)
+
+            import json
+            from modules.evidence_integrity import extract_safe_manifest
+            safe_manifest = extract_safe_manifest(evidence_manifest)
+            manifest_json = json.dumps(safe_manifest, indent=2, sort_keys=True, ensure_ascii=False)
+            st.download_button("Download Integrity Manifest", data=manifest_json, file_name=f"manifest_{email_hash}.json", mime="application/json")
 
 footer()

@@ -1,6 +1,12 @@
 import streamlit as st
 from modules.campaign_correlator import list_campaigns, get_campaign_cases
-from modules.ui_theme import apply_theme, app_header, sidebar_navigation, footer
+from modules.ui_theme import apply_theme, app_header, sidebar_navigation, footer, apply_chart_theme
+from modules.ioc_relationship import (
+    build_ioc_graph,
+    generate_fallback_table,
+    render_ioc_graph,
+)
+from modules.session_case_store import get_cases_for_correlation
 
 st.set_page_config(page_title="Campaigns - MailTrace AI", layout="wide", initial_sidebar_state="expanded")
 apply_theme()
@@ -10,6 +16,31 @@ app_header(title="Campaign Intelligence", subtitle="Correlate cases and track at
 st.warning("Note: Correlation indicates likely shared infrastructure, not proof of a shared attacker.")
 
 st.info("Privacy mode: Cases are stored only for your current session and are automatically cleared when the session ends.")
+
+st.markdown("---")
+st.subheader("IOC Relationship Explorer")
+cases = get_cases_for_correlation()
+if not cases:
+    st.info("No cases available to map relationships.")
+else:
+    graph_data = build_ioc_graph(cases)
+    if graph_data.get("truncated"):
+        st.warning("Graph truncated to 100 nodes / 200 edges for performance.")
+
+    fig = render_ioc_graph(graph_data)
+    fig = apply_chart_theme(fig)
+    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+    st.caption("Relationships indicate shared technical artifacts, not proof of common ownership or attribution to a specific person.")
+
+    with st.expander("Accessible Relationship Data"):
+        fallback = generate_fallback_table(graph_data)
+        if fallback:
+            st.dataframe(fallback, use_container_width=True, hide_index=True)
+        else:
+            st.write("No indicators to display.")
+
+st.markdown("---")
 
 campaigns = list_campaigns()
 

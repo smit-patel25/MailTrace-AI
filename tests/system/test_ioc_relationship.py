@@ -337,3 +337,59 @@ def test_campaigns_page_populated(monkeypatch):
 
     # Assert the Accessible Relationship Data expander exists
     assert any("Accessible Relationship Data" in getattr(e, "label", "") for e in at.expander)
+
+
+def test_no_undefined_in_json_and_title_empty():
+    cases = [{"case_id": "C1", "sender_domain": "example.com"}]
+    graph = build_ioc_graph(cases)
+    fig = render_ioc_graph(graph)
+    from modules.ui_theme import apply_chart_theme
+    fig = apply_chart_theme(fig)
+
+    fig_json = fig.to_plotly_json()
+    json_str = str(fig_json)
+    assert "undefined" not in json_str.lower()
+
+    layout = fig_json.get("layout", {})
+    if "title" in layout:
+        assert layout["title"].get("text", "") == ""
+
+
+def test_legend_order_and_absent_types():
+    cases = [{"case_id": "C1", "sender_domain": "example.com"}]
+    graph = build_ioc_graph(cases)
+    fig = render_ioc_graph(graph)
+
+    # Only Case and Domain present
+    traces = [t.name for t in fig.data if getattr(t, "name", None)]
+    assert traces == ["Case", "Domain"]
+
+
+def test_url_host_node_type():
+    cases = [{"case_id": "C1", "extracted_urls": ["http://test.com", "http://1.2.3.4"], "probable_origin_ip": "5.6.7.8"}]
+    graph = build_ioc_graph(cases)
+    fig = render_ioc_graph(graph)
+
+    node_types = {n["type"] for n in graph["nodes"]}
+    assert "URL Host" in node_types
+    assert "IP" in node_types
+    assert "URL" not in node_types
+
+    url_node = next(n for n in graph["nodes"] if n["id"] == "url_test.com")
+    assert url_node["type"] == "URL Host"
+
+    url_ip_node = next(n for n in graph["nodes"] if n["id"] == "url_1.2.3.4")
+    assert url_ip_node["type"] == "URL Host"
+
+    relay_ip_node = next(n for n in graph["nodes"] if n["id"] == "ip_5.6.7.8")
+    assert relay_ip_node["type"] == "IP"
+
+
+def test_shared_ioc_highlighting():
+    cases = [
+        {"case_id": "C1", "sender_domain": "shared.com"},
+        {"case_id": "C2", "sender_domain": "shared.com"}
+    ]
+    graph = build_ioc_graph(cases)
+    shared_node = next(n for n in graph["nodes"] if n["id"] == "domain_shared.com")
+    assert shared_node["degree"] == 2

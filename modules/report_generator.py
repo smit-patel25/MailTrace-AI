@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
+from modules.evidence_integrity import extract_safe_manifest
 
 def generate_report_id():
     return datetime.now(timezone.utc).strftime("REPORT-%Y%m%d-") + uuid.uuid4().hex[:4].upper()
@@ -55,11 +56,13 @@ def extract_safe_data(case_data):
             }
             for a in results.get("attachment_analysis", {}).get("attachments", [])
         ],
+        "evidence_manifest": extract_safe_manifest(results.get("evidence_manifest", {})),
         "disclaimers": [
             "Geolocation represents estimated infrastructure location.",
             "Authentication header values may be reported rather than independently verified.",
             "Campaign correlation is not proof of attacker identity.",
             "Attachment assessment is based on metadata only and is not a malware scan.",
+            "Integrity hashes help detect changes to analyzed evidence. They do not provide a digital signature, prove sender identity, or establish legal chain of custody. Because these hashes are not digitally signed, they must be compared with a trusted prior value. Someone able to modify both the evidence and manifest could recompute the hashes.",
             "Assessment is for investigative support."
         ]
     }
@@ -145,7 +148,36 @@ th {{ background-color: #f2f2f2; width: 30%; }}
 <tr><th>Confidence</th><td>{html.escape(str(data['confidence']))}</td></tr>
 <tr><th>Scoring Version</th><td>{html.escape(str(data['scoring_version']))}</td></tr>
 </table>
+"""
+    if data.get('evidence_manifest'):
+        manifest = data['evidence_manifest']
+        html_content += f"""
+<h2>Evidence Integrity Manifest</h2>
+<table>
+<tr><th>Manifest Version</th><td>{html.escape(str(manifest.get('manifest_version')))}</td></tr>
+<tr><th>Case ID</th><td>{html.escape(str(manifest.get('case_id')))}</td></tr>
+<tr><th>Source Filename</th><td>{html.escape(str(manifest.get('source_filename')))}</td></tr>
+<tr><th>Integrity Status</th><td>{html.escape(str(manifest.get('integrity_status')))}</td></tr>
+<tr><th>Email SHA-256</th><td><code style='font-size:0.8em; word-wrap:break-word; word-break:break-all;'>{html.escape(str(manifest.get('email_sha256')))}</code></td></tr>
+<tr><th>Manifest SHA-256</th><td><code style='font-size:0.8em; word-wrap:break-word; word-break:break-all;'>{html.escape(str(manifest.get('manifest_sha256')))}</code></td></tr>
+<tr><th>Email Size</th><td>{html.escape(str(manifest.get('email_size')))} B</td></tr>
+<tr><th>Analysis Timestamp</th><td>{html.escape(str(manifest.get('analysis_timestamp')))}</td></tr>
+<tr><th>Scoring Version</th><td>{html.escape(str(manifest.get('scoring_version')))}</td></tr>
+"""
+        manifest_atts = manifest.get('attachments', [])
+        html_content += f"<tr><th>Attachment Count</th><td>{len(manifest_atts)}</td></tr>\n"
+        html_content += "</table>\n"
 
+        if manifest_atts:
+            html_content += "<h3>Manifest Attachments</h3>\n<ul>\n"
+            for matt in manifest_atts:
+                m_fname = html.escape(str(matt.get('filename', 'Unknown')))
+                m_sha = html.escape(str(matt.get('sha256', 'None')))
+                html_content += f"<li><strong>{m_fname}</strong>: <code style='font-size:0.8em; word-wrap:break-word; word-break:break-all;'>{m_sha}</code></li>\n"
+            html_content += "</ul>\n"
+
+
+    html_content += """
 <h2>Component Scores</h2>
 <table>
 """
@@ -231,6 +263,37 @@ def generate_pdf_report(case_data) -> bytes:
     for line in assess_lines:
         elements.append(Paragraph(line, body_style))
     elements.append(Spacer(1, 12))
+
+    if data.get('evidence_manifest'):
+        manifest = data['evidence_manifest']
+        elements.append(Paragraph("Evidence Integrity Manifest", heading_style))
+        manifest_lines = [
+            f"<b>Manifest Version:</b> {html.escape(str(manifest.get('manifest_version')))}",
+            f"<b>Case ID:</b> {html.escape(str(manifest.get('case_id')))}",
+            f"<b>Source Filename:</b> {html.escape(str(manifest.get('source_filename')))}",
+            f"<b>Integrity Status:</b> {html.escape(str(manifest.get('integrity_status')))}",
+            f"<b>Email Size:</b> {html.escape(str(manifest.get('email_size')))} B",
+            f"<b>Analysis Timestamp:</b> {html.escape(str(manifest.get('analysis_timestamp')))}",
+            f"<b>Scoring Version:</b> {html.escape(str(manifest.get('scoring_version')))}",
+            f"<b>Email SHA-256:</b> {html.escape(str(manifest.get('email_sha256')))}",
+            f"<b>Manifest SHA-256:</b> {html.escape(str(manifest.get('manifest_sha256')))}"
+        ]
+
+        manifest_atts = manifest.get('attachments', [])
+        manifest_lines.append(f"<b>Attachment Count:</b> {len(manifest_atts)}")
+
+        for line in manifest_lines:
+            elements.append(Paragraph(line, body_style))
+
+        if manifest_atts:
+            elements.append(Spacer(1, 6))
+            elements.append(Paragraph("Manifest Attachments", styles['Heading3']))
+            for matt in manifest_atts:
+                m_fname = html.escape(str(matt.get('filename', 'Unknown')))
+                m_sha = html.escape(str(matt.get('sha256', 'None')))
+                elements.append(Paragraph(f"<b>{m_fname}</b>: {m_sha}", body_style))
+
+        elements.append(Spacer(1, 12))
 
     if data['key_indicators']:
         elements.append(Paragraph("Key Indicators", heading_style))

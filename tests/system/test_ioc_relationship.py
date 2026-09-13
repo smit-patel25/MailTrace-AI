@@ -82,16 +82,16 @@ def test_extract_hostnames():
         None
     ]
     hosts = _extract_hostnames(urls)
-    assert "example.com" in hosts
-    assert "test.com" in hosts
-    assert "evil.com" in hosts
-    assert "evil2.com" in hosts
-    assert "defanged.com" in hosts
-    assert "creds.com" in hosts
-    assert "2001:db8:85a3::8a2e:370:7334" in hosts
-    assert "invalid_url" not in hosts
-    assert "none" not in hosts
-    assert "rejected.com" not in hosts
+    expected_hosts = {
+        "example.com",
+        "test.com",
+        "evil.com",
+        "evil2.com",
+        "defanged.com",
+        "creds.com",
+        "2001:db8:85a3::8a2e:370:7334",
+    }
+    assert hosts == expected_hosts
 
 
 def test_malformed_top_level_and_nested():

@@ -46,7 +46,8 @@ def _is_valid_timestamp(val: str) -> bool:
     if not isinstance(val, str):
         return False
     try:
-        dt = datetime.fromisoformat(val.replace('Z', '+00:00'))
+        normalized = val[:-1] + "+00:00" if val.endswith("Z") else val
+        dt = datetime.fromisoformat(normalized)
         return dt.tzinfo is not None and dt.tzinfo.utcoffset(dt) is not None
     except (ValueError, TypeError):
         return False
@@ -75,11 +76,14 @@ def build_evidence_manifest(
         raise ValueError("scoring_version must be a non-empty string.")
 
     try:
-        dt = datetime.fromisoformat(analysis_timestamp)
+        if not isinstance(analysis_timestamp, str):
+            raise ValueError("analysis_timestamp must be a string.")
+        normalized_input = analysis_timestamp[:-1] + "+00:00" if analysis_timestamp.endswith("Z") else analysis_timestamp
+        dt = datetime.fromisoformat(normalized_input)
         if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:
             raise ValueError("analysis_timestamp must be timezone-aware.")
         # Normalize to UTC and append 'Z'
-        normalized_timestamp = dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        normalized_timestamp = dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     except (ValueError, TypeError):
         raise ValueError("analysis_timestamp must be a valid timezone-aware ISO-8601 string.")
 

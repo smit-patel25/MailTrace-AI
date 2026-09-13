@@ -183,6 +183,20 @@ def test_timezone_offsets_normalize_to_utc():
     assert manifest["analysis_timestamp"].endswith("Z")
     assert manifest["analysis_timestamp"].startswith("2023-10-01T08:00:00")
 
+def test_z_and_offset_timestamps_produce_identical_manifests():
+    """Regression: trailing Z and equivalent +00:00 offset must produce the same manifest."""
+    email_bytes = b"regression bytes"
+    m_z = build_evidence_manifest(email_bytes, "reg.eml", "2023-10-01T12:00:00Z", "1.0", [])
+    m_offset = build_evidence_manifest(email_bytes, "reg.eml", "2023-10-01T12:00:00+00:00", "1.0", [])
+    assert m_z["analysis_timestamp"] == m_offset["analysis_timestamp"]
+    assert m_z["manifest_sha256"] == m_offset["manifest_sha256"]
+
+def test_z_timestamp_output_has_no_microseconds():
+    """Normalized UTC output must be HH:MM:SSZ without microseconds for stable canonical hashing."""
+    manifest = build_evidence_manifest(b"x", "f.eml", "2023-10-01T12:00:00Z", "1.0", [])
+    ts = manifest["analysis_timestamp"]
+    assert ts == "2023-10-01T12:00:00Z"
+
 def test_malformed_manifests_rejected_schema_validation():
     manifest = build_evidence_manifest(b"abc", "test.eml", "2023-10-01T12:00:00Z", "1.0", [])
     # Force an invalid field (e.g., boolean email_size)

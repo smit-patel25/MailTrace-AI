@@ -15,7 +15,7 @@ NODE_COLORS = {
     "Case": "#4C8DFF",      # accent-blue
     "IP": "#2DBE8C",        # success / teal
     "Domain": "#F0B44D",    # warning / amber
-    "URL": "#A678FF",       # accent-purple
+    "URL Host": "#A678FF",  # accent-purple
     "Hash": "#E11D48"       # accent-rose
 }
 
@@ -23,7 +23,7 @@ NODE_X = {
     "Case": 0,
     "IP": 1,
     "Domain": 2,
-    "URL": 3,
+    "URL Host": 3,
     "Hash": 4
 }
 
@@ -185,7 +185,7 @@ def build_ioc_graph(cases: Any) -> dict:
         # URLs
         for host in sorted(_extract_hostnames(case.get("extracted_urls"))):
             h_id = f"url_{host}"
-            if add_node(h_id, "URL", host):
+            if add_node(h_id, "URL Host", host):
                 add_edge(case_node_id, h_id)
 
         # Attachment Hashes
@@ -274,7 +274,12 @@ def render_ioc_graph(graph_data: dict) -> go.Figure:
     for n in nodes:
         grouped_nodes.setdefault(n["type"], []).append(n)
 
-    for ntype, items in grouped_nodes.items():
+    ordered_types = ["Case", "IP", "Domain", "URL Host", "Hash"]
+
+    for ntype in ordered_types:
+        if ntype not in grouped_nodes:
+            continue
+        items = grouped_nodes[ntype]
         nx = [n["x"] for n in items]
         ny = [n["y"] for n in items]
 
@@ -320,6 +325,7 @@ def render_ioc_graph(graph_data: dict) -> go.Figure:
         ))
 
     fig.update_layout(
+        title_text="",
         showlegend=True,
         legend=dict(
             orientation="h",

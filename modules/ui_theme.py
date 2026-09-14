@@ -956,6 +956,69 @@ def sidebar_navigation():
         st.page_link("pages/2_Campaigns.py", label="Campaigns")
         st.page_link("pages/3_Dashboard.py", label="Dashboard")
 
+        st.markdown(
+            """
+            <hr style='border-color:var(--border-primary);margin:1rem 0;'>
+            <span id="clear-session-anchor"></span>
+            <style>
+                @media (prefers-reduced-motion: no-preference) {
+                    div.element-container:has(#clear-session-anchor) ~ div.element-container div[data-testid="stButton"] button {
+                        transition: transform 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+                    }
+                    div.element-container:has(#clear-session-anchor) ~ div.element-container div[data-testid="stButton"] button:active {
+                        transform: scale(0.97);
+                    }
+                }
+                @media (prefers-reduced-motion: no-preference) and (hover: hover) and (pointer: fine) {
+                    div.element-container:has(#clear-session-anchor) ~ div.element-container div[data-testid="stButton"] button:hover {
+                        transform: translateY(-1px);
+                    }
+                }
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        if not st.session_state.get("_clear_confirm", False):
+            if st.button(
+                "\U0001f5d1 Clear session data",
+                key="btn_clear_session_request",
+                use_container_width=True,
+                help="Remove all email analyses, cases and reports from this session.",
+            ):
+                st.session_state["_clear_confirm"] = True
+                st.rerun()
+        else:
+            st.warning(
+                "**Clear session data?**\n\n"
+                "This removes email analyses, cases and reports from this session. "
+                "Download anything you need first. "
+                "Already-downloaded files are unaffected.",
+            )
+            col_yes, col_no = st.columns(2)
+            with col_yes:
+                if st.button(
+                    "\u2713 Confirm",
+                    key="btn_clear_session_confirm",
+                    type="primary",
+                    use_container_width=True,
+                ):
+                    with st.spinner("Clearing session data..."):
+                        from modules.session_case_store import clear_all_session_data
+                        clear_all_session_data()
+                    st.session_state.pop("_clear_confirm", None)
+                    st.success("Session data cleared.")
+                    st.rerun()
+            with col_no:
+                if st.button(
+                    "\u2717 Cancel",
+                    key="btn_clear_session_cancel",
+                    use_container_width=True,
+                ):
+                    st.session_state.pop("_clear_confirm", None)
+                    st.rerun()
+
+
 
 def footer():
     st.markdown(

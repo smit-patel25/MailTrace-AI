@@ -1,0 +1,430 @@
+import json
+import zlib
+import re
+import pytest
+from modules.report_generator import generate_json_report, generate_html_report, generate_pdf_report
+from modules.data_masking import mask_case_data
+
+def extract_pdf_text_streams(pdf_bytes):
+    streams = re.findall(b'stream\r?\n(.*?)endstream', pdf_bytes, re.DOTALL)
+    text = ""
+    for s in streams:
+        s = s.strip()
+        decoded = False
+        try:
+            import base64
+            a85 = s
+            if not a85.endswith(b'~>'):
+                a85 += b'~>'
+            decompressed = zlib.decompress(base64.a85decode(a85, adobe=True))
+            text += decompressed.decode('utf-8', errors='ignore')
+            decoded = True
+        except Exception:
+            pass
+
+        if not decoded:
+            try:
+                decompressed = zlib.decompress(s)
+                text += decompressed.decode('utf-8', errors='ignore')
+                decoded = True
+            except Exception:
+                pass
+
+        if not decoded:
+            text += s.decode('utf-8', errors='ignore')
+
+    return text
+
+@pytest.fixture
+def complex_case():
+    return {
+        "case_id": "CASE-999",
+        "filename": "top_secret.docx",
+        "email_hash": "deadbeef1234",
+        "subject": "Confidential IP: 192.168.1.100 and email admin@secret.org",
+        "sender_address": "attacker@evil.com",
+        "sender_domain": "evil.com",
+        "probable_origin_ip": "2001:0db8:85a3:0000:0000:8a2e:0370:7334",
+        "fraud_score": 95,
+        "risk_level": "Critical",
+        "verdict": "Malicious",
+        "analyzer_results": {
+            "fraud_score": {
+                "scoring_version": "1.2"
+            },
+            "header_analysis": {
+                "indicators": [
+                    {"severity": "high", "explanation": "Failed SPF for attacker@evil.com from 192.168.1.100"}
+                ]
+            },
+            "content_analysis": {
+                "defanged_urls": [
+                    "hxxps://admin:password123@evil.com/login.php?session=abc#token",
+                    "http://10.0.0.1/malware.exe"
+                ]
+            },
+            "attachment_analysis": {
+                "attachments": [
+                    {"filename": "payload.exe", "size": 1024, "sha256": "abcd"}
+                ]
+            },
+            "evidence_manifest": {
+                "manifest_version": "1.0",
+                "case_id": "CASE-999",
+                "email_sha256": "deadbeef1234"
+            }
+        },
+        "body_text": "Please click http://10.0.0.1/malware.exe and email me at victim@company.com",
+        "body_html": "<p>Please click http://10.0.0.1/malware.exe</p>"
+    }
+
+def test_masking_does_not_mutate_original(complex_case):
+    import copy
+    original_copy = copy.deepcopy(complex_case)
+    mask_case_data(complex_case)
+    assert complex_case == original_copy
+
+def test_masking_off_preserves_data(complex_case):
+    json_bytes = generate_json_report(complex_case, mask_data=False)
+    text = json_bytes.decode('utf-8')
+    assert "admin@secret.org" in text
+    assert "192.168.1.100" in text
+    assert "payload.exe" in text
+    assert "top_secret.docx" in text
+    assert "attacker@evil.com" in text
+    assert "2001:0db8:85a3:0000:0000:8a2e:0370:7334" in text
+    assert "password123" in text
+    # Evidence manifest should be present
+    assert "evidence_manifest" in text
+    assert "deadbeef1234" in text
+
+def test_masking_json_report_leakage(complex_case):
+    json_bytes = generate_json_report(complex_case, mask_data=True)
+    text = json_bytes.decode('utf-8')
+
+    # Sensitive data should NOT be present
+    assert "admin@secret.org" not in text
+    assert "192.168.1.100" not in text
+    assert "payload.exe" not in text
+    assert "top_secret.docx" not in text
+    assert "attacker@evil.com" not in text
+    assert "2001:0db8:85a3:0000:0000:8a2e:0370:7334" not in text
+    assert "password123" not in text
+    assert "session=abc" not in text
+
+    # Non-sensitive structure should be preserved
+    assert "CASE-999" in text
+    assert "Critical" in text
+    assert "Malicious" in text
+    assert "1.2" in text
+
+    # Original manifest must be omitted
+    report = json.loads(text)
+    assert report.get("evidence_manifest") is None
+
+    # Disclaimers updated
+    assert any("SENSITIVE DATA MASKING ENABLED" in d for d in report["disclaimers"])
+
+def test_masking_html_report_leakage(complex_case):
+    html_bytes = generate_html_report(complex_case, mask_data=True)
+    text = html_bytes.decode('utf-8')
+
+    assert "admin@secret.org" not in text
+    assert "192.168.1.100" not in text
+    assert "payload.exe" not in text
+    assert "top_secret.docx" not in text
+    assert "attacker@evil.com" not in text
+    assert "2001:0db8:85a3:0000:0000:8a2e:0370:7334" not in text
+    assert "password123" not in text
+
+    assert "CASE-999" in text
+    assert "SENSITIVE DATA MASKING ENABLED" in text
+
+def test_masking_pdf_report_leakage(complex_case):
+    # Prove extraction works on unmasked PDF
+    unmasked_pdf = generate_pdf_report(complex_case, mask_data=False)
+    unmasked_text = extract_pdf_text_streams(unmasked_pdf)
+    assert "Forensic" in unmasked_text
+    assert "admin@secret.org" in unmasked_text
+
+    pdf_bytes = generate_pdf_report(complex_case, mask_data=True)
+
+    # Deep PDF stream check
+    pdf_text = extract_pdf_text_streams(pdf_bytes)
+    assert "Forensic" in pdf_text
+    assert "admin@secret.org" not in pdf_text
+    assert "192.168.1.100" not in pdf_text
+    assert "payload.exe" not in pdf_text
+    assert "attacker@evil.com" not in pdf_text
+    assert "2001:0db8:85a3:0000:0000:8a2e:0370:7334" not in pdf_text
+    assert "password123" not in pdf_text
+
+def test_app_analysis_export_path_with_masking():
+    """Verify that checking the mask option in app.py reaches all three export generators."""
+    from streamlit.testing.v1 import AppTest
+    import os
+    from modules.case_database import initialize_database
+    import tempfile
+    import json
+    import unittest.mock
+
+    fd, path = tempfile.mkstemp(suffix='.sqlite3')
+    os.close(fd)
+    old_db_path = os.environ.get('DB_PATH')
+    os.environ['DB_PATH'] = path
+    initialize_database(path)
+
+    try:
+        app_path = os.path.join(os.path.dirname(__file__), "..", "..", "app.py")
+        fixture_path = os.path.join(os.path.dirname(__file__), "..", "fixtures", "valid_plain.eml")
+
+        with open(fixture_path, "rb") as f:
+            file_bytes = f.read()
+
+        import modules.report_generator as rg
+        import modules.evidence_integrity as ei
+
+        calls_json = []
+        calls_html = []
+        calls_pdf = []
+
+        orig_json = rg.generate_json_report
+        orig_html = rg.generate_html_report
+        orig_pdf = rg.generate_pdf_report
+
+        def spy_json(case, mask_data=False):
+            calls_json.append((case, mask_data))
+            return orig_json(case, mask_data)
+        def spy_html(case, mask_data=False):
+            calls_html.append((case, mask_data))
+            return orig_html(case, mask_data)
+        def spy_pdf(case, mask_data=False):
+            calls_pdf.append((case, mask_data))
+            return orig_pdf(case, mask_data)
+
+        # Force manifest unavailable dynamically
+        def spy_build(*args, **kwargs):
+            return {} # Returning empty dict makes `if evidence_manifest:` evaluate to False
+
+        with unittest.mock.patch('modules.report_generator.generate_json_report', side_effect=spy_json), \
+             unittest.mock.patch('modules.report_generator.generate_html_report', side_effect=spy_html), \
+             unittest.mock.patch('modules.report_generator.generate_pdf_report', side_effect=spy_pdf), \
+             unittest.mock.patch('modules.evidence_integrity.build_evidence_manifest', side_effect=spy_build):
+
+            at = AppTest.from_file(app_path, default_timeout=15).run()
+
+            at.file_uploader[0].set_value(
+                ("valid_plain.eml", file_bytes, "message/rfc822")
+            ).run()
+
+            # Click the Analyze Email button (which has an emoji)
+            analyze_btn = [b for b in at.button if "Analyze Email" in b.label]
+            if analyze_btn:
+                analyze_btn[0].click().run()
+
+            assert not at.exception
+
+            # Verify un-nesting: export controls should be visible even with unavailable manifest
+            assert any("Export Reports" in str(getattr(m, 'value', '')) for m in at.markdown)
+
+            # Find checkbox
+            mask_cb = [c for c in at.checkbox if c.label == "Mask sensitive data in exports"]
+            assert len(mask_cb) == 1
+
+            # Check it and rerun
+            mask_cb[0].set_value(True).run()
+
+            # Ensure download buttons still exist
+            dls = [b for b in at.download_button if "Report" in b.label]
+            assert len(dls) == 3
+
+            # Verify the generators were called with mask_data=True
+            assert len(calls_json) >= 1
+            assert calls_json[-1][1] is True
+            assert len(calls_html) >= 1
+            assert calls_html[-1][1] is True
+            assert len(calls_pdf) >= 1
+            assert calls_pdf[-1][1] is True
+
+            # Inspect captured JSON output
+            captured_case = calls_json[-1][0]
+            masked_json = json.loads(orig_json(captured_case, mask_data=True).decode('utf-8'))
+
+            # Ensure expected scores and masked fields are correct in the final output
+            assert masked_json["filename"].startswith("[FILE")
+            assert masked_json["filename"] != "valid_plain.eml"
+            assert "fraud_score" in masked_json
+
+    finally:
+        if old_db_path:
+            os.environ['DB_PATH'] = old_db_path
+        else:
+            del os.environ['DB_PATH']
+        os.unlink(path)
+
+def test_deterministic_repeated_indicator_masking(complex_case):
+    json_bytes = generate_json_report(complex_case, mask_data=True)
+    report = json.loads(json_bytes)
+
+    # Check that the same IP masked in different places yields the same placeholder
+    subject_val = report["subject"]
+    header_val = report["key_indicators"][0]["explanation"]
+
+    # Subject was explicitly omitted!
+    assert subject_val == "[OMITTED]"
+
+    # The header is "Failed SPF for attacker@evil.com from 192.168.1.100"
+    assert "[EMAIL-" in header_val
+    assert "[IPV4-" in header_val
+
+    urls = report["defanged_urls"]
+    assert "evil.com/[MASKED_PATH" in urls[0] # domain preserved, path masked
+    assert "http://[IPV4-" in urls[1] # IP in URL domain is masked
+
+def test_masking_ipv6_variants():
+    case = {
+        'case_id': 'V6',
+        'analyzer_results': {
+            'ips': [
+                '::1',
+                '2001:db8::',
+                '2001:db8:85a3::8a2e:370:7334',
+                '::ffff:192.168.1.1'
+            ]
+        }
+    }
+    from modules.data_masking import mask_case_data
+    masked = mask_case_data(case)
+    ips = masked['analyzer_results']['ips']
+    assert all('[IPV6-' in ip for ip in ips)
+    assert '::1' not in ips
+    assert '2001:db8::' not in ips
+
+def test_masking_ipv6_bare():
+    case = {
+        'case_id': 'V6BARE',
+        'analyzer_results': {
+            'ips': [
+                '::'
+            ]
+        }
+    }
+    from modules.data_masking import mask_case_data
+    masked = mask_case_data(case)
+    ips = masked['analyzer_results']['ips']
+    assert len(ips) == 1
+    assert '[IPV6-' in ips[0]
+    assert '::' not in ips[0]
+
+def test_masking_preserves_assessment_structure():
+    # Reproduction from prompt
+    case = {
+      "filename": "a",
+      "verdict": "Malicious",
+      "risk_level": "Moderate",
+      "analyzer_results": {
+        "fraud_score": {
+          "component_scores": {"header_risk": 5, "attachment_risk": 50},
+          "scoring_version": "1.0"
+        },
+        "header_analysis": {
+            "indicators": [
+                {"explanation": "Found a attached"}
+            ]
+        }
+      }
+    }
+    from modules.data_masking import mask_case_data
+    masked = mask_case_data(case)
+
+    # Verdict, risk_level, scoring_version, and component_scores should remain completely unchanged
+    assert masked["verdict"] == "Malicious"
+    assert masked["risk_level"] == "Moderate"
+    assert masked["analyzer_results"]["fraud_score"]["component_scores"]["header_risk"] == 5
+    assert masked["analyzer_results"]["fraud_score"]["component_scores"]["attachment_risk"] == 50
+    assert masked["analyzer_results"]["fraud_score"]["scoring_version"] == "1.0"
+
+    # The filename "a" should be masked in structural field
+    assert "[FILE-" in masked["filename"]
+    # The filename "a" should ALSO be masked in descriptive field
+    explanation = masked["analyzer_results"]["header_analysis"]["indicators"][0]["explanation"]
+    assert "[FILE-" in explanation
+    assert "Found [FILE-" in explanation
+    assert " a " not in explanation
+
+def test_masking_ipv6_url_credentials():
+    case = {
+        'case_id': 'V6URL',
+        'analyzer_results': {
+            'content_analysis': {
+                'defanged_urls': [
+                    'http://user:pass@[2001:db8::1]:8080/path?q=1'
+                ]
+            }
+        }
+    }
+    from modules.data_masking import mask_case_data
+    masked = mask_case_data(case)
+    url = masked['analyzer_results']['content_analysis']['defanged_urls'][0]
+    assert 'user:pass' not in url
+    assert '2001:db8::1' not in url
+    assert '/[MASKED_PATH-' in url
+    assert url.startswith('http://[IPV6-') or url.startswith('http://[[IPV6-') # depending on if brackets kept
+
+def test_masking_repeated_filenames_in_text():
+    case = {
+        'case_id': 'FILE',
+        'filename': 'invoice.pdf',
+        'analyzer_results': {
+            'attachment_analysis': {
+                'attachments': [
+                    {'filename': 'payload.exe'}
+                ]
+            },
+            'header_analysis': {
+                'indicators': [
+                    {'explanation': 'Found malicious payload.exe inside invoice.pdf attached'}
+                ]
+            }
+        }
+    }
+    from modules.data_masking import mask_case_data
+    masked = mask_case_data(case)
+    explanation = masked['analyzer_results']['header_analysis']['indicators'][0]['explanation']
+    assert 'payload.exe' not in explanation
+    assert 'invoice.pdf' not in explanation
+    assert '[FILE-' in explanation
+
+def test_app_current_case_data_schema():
+    # Matches the exact dictionary structure built in app.py
+    current_case_data = {
+        'case_id': 'Unsaved Analysis',
+        'filename': 'demo_sample.eml',
+        'email_hash': '1234abcd',
+        'subject': 'Test Subject',
+        'sender_address': 'test@example.com',
+        'sender_domain': 'example.com',
+        'probable_origin_ip': '10.0.0.1',
+        'analyzer_results': {
+            'header_analysis': {'indicators': []},
+            'content_analysis': {'defanged_urls': []},
+            'geo_result': {'available': True, 'location': {'country': 'US'}},
+            'domain_result': {'available': True, 'domain_age_days': 100},
+            'fraud_score': {'final_score': 50, 'scoring_version': '1.0'},
+            'attachment_analysis': {'attachments': []},
+            'evidence_manifest': {'manifest_version': '1.0'}
+        },
+        'risk_level': 'Moderate',
+        'verdict': 'Suspicious',
+        'confidence': 'High'
+    }
+    json_bytes = generate_json_report(current_case_data, mask_data=False)
+    report = json.loads(json_bytes.decode('utf-8'))
+
+    assert report['filename'] == 'demo_sample.eml'
+    assert report['sender'] == 'test@example.com'
+    assert report['probable_origin_ip'] == '10.0.0.1'
+    assert report['verdict'] == 'Suspicious'
+    assert report.get('scoring_version') == '1.0'
+    assert report['geolocation']['country'] == 'US'
+    assert report['domain_intelligence']['domain_age_days'] == 100

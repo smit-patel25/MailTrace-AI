@@ -854,39 +854,84 @@ if raw_bytes is not None:
                         st.warning(d)
 
             # Evidence Integrity
-            section_header("Evidence Integrity", "teal")
-            st.markdown("<p style='font-size:0.85rem; color:var(--text-muted); margin-top:-8px; margin-bottom:12px;'>Integrity hashes help detect changes to analyzed evidence. They do not provide a digital signature, prove sender identity, or establish legal chain of custody. Because these hashes are not digitally signed, they must be compared with a trusted prior value. Someone able to modify both the evidence and manifest could recompute the hashes.</p>", unsafe_allow_html=True)
+            if evidence_manifest:
+                section_header("Evidence Integrity", "teal")
+                st.markdown("<p style='font-size:0.85rem; color:var(--text-muted); margin-top:-8px; margin-bottom:12px;'>Integrity hashes help detect changes to analyzed evidence. They do not provide a digital signature, prove sender identity, or establish legal chain of custody. Because these hashes are not digitally signed, they must be compared with a trusted prior value. Someone able to modify both the evidence and manifest could recompute the hashes.</p>", unsafe_allow_html=True)
 
-            e_col1, e_col2 = st.columns(2)
+                e_col1, e_col2 = st.columns(2)
 
-            size_val = evidence_manifest.get('email_size', 0)
-            if not isinstance(size_val, int) or isinstance(size_val, bool):
-                size_val = 0
+                size_val = evidence_manifest.get('email_size', 0)
+                if not isinstance(size_val, int) or isinstance(size_val, bool):
+                    size_val = 0
 
-            att_list = evidence_manifest.get('attachments')
-            att_len = len(att_list) if isinstance(att_list, list) else 0
+                att_list = evidence_manifest.get('attachments')
+                att_len = len(att_list) if isinstance(att_list, list) else 0
 
-            with e_col1:
-                st.markdown(f"**Integrity Status:** {html.escape(str(evidence_manifest.get('integrity_status', 'Unknown')))}")
-                st.markdown(f"**Analysis Timestamp:** {html.escape(str(evidence_manifest.get('analysis_timestamp', 'Unknown')))}")
-                st.markdown(f"**Email Size:** {size_val:,} B")
-                st.markdown(f"**Attachments Tracked:** {att_len}")
-            with e_col2:
-                st.markdown(f"**Manifest Version:** {html.escape(str(evidence_manifest.get('manifest_version', '1.0')))}")
-                st.markdown(f"**Scoring Version:** {html.escape(str(evidence_manifest.get('scoring_version', 'Unknown')))}")
+                with e_col1:
+                    st.markdown(f"**Integrity Status:** {html.escape(str(evidence_manifest.get('integrity_status', 'Unknown')))}")
+                    st.markdown(f"**Analysis Timestamp:** {html.escape(str(evidence_manifest.get('analysis_timestamp', 'Unknown')))}")
+                    st.markdown(f"**Email Size:** {size_val:,} B")
+                    st.markdown(f"**Attachments Tracked:** {att_len}")
+                with e_col2:
+                    st.markdown(f"**Manifest Version:** {html.escape(str(evidence_manifest.get('manifest_version', '1.0')))}")
+                    st.markdown(f"**Scoring Version:** {html.escape(str(evidence_manifest.get('scoring_version', 'Unknown')))}")
 
-            html_block = f"""
-            <div class='soc-wrap' style='margin-top: 1rem; font-size: 0.85rem; background-color: var(--surface-primary); padding: 1rem; border-radius: var(--radius-md); border: 1px solid var(--border-primary);'>
-                <strong>Email SHA-256:</strong><br><code style='color: var(--text-primary); word-break: break-all;'>{html.escape(str(evidence_manifest.get('email_sha256', 'None')))}</code>
-                <div style='margin-top: 0.5rem;'><strong>Manifest SHA-256:</strong><br><code style='color: var(--accent-primary); word-break: break-all;'>{html.escape(str(evidence_manifest.get('manifest_sha256', 'None')))}</code></div>
-            </div>
-            """
-            st.markdown(html_block, unsafe_allow_html=True)
+                html_block = f"""
+                <div class='soc-wrap' style='margin-top: 1rem; font-size: 0.85rem; background-color: var(--surface-primary); padding: 1rem; border-radius: var(--radius-md); border: 1px solid var(--border-primary);'>
+                    <strong>Email SHA-256:</strong><br><code style='color: var(--text-primary); word-break: break-all;'>{html.escape(str(evidence_manifest.get('email_sha256', 'None')))}</code>
+                    <div style='margin-top: 0.5rem;'><strong>Manifest SHA-256:</strong><br><code style='color: var(--accent-primary); word-break: break-all;'>{html.escape(str(evidence_manifest.get('manifest_sha256', 'None')))}</code></div>
+                </div>
+                """
+                st.markdown(html_block, unsafe_allow_html=True)
 
-            import json
-            from modules.evidence_integrity import extract_safe_manifest
-            safe_manifest = extract_safe_manifest(evidence_manifest)
-            manifest_json = json.dumps(safe_manifest, indent=2, sort_keys=True, ensure_ascii=False)
-            st.download_button("Download Integrity Manifest", data=manifest_json, file_name=f"manifest_{email_hash}.json", mime="application/json")
+                import json
+                from modules.evidence_integrity import extract_safe_manifest
+                safe_manifest = extract_safe_manifest(evidence_manifest)
+                manifest_json = json.dumps(safe_manifest, indent=2, sort_keys=True, ensure_ascii=False)
+
+                st.markdown("<p style='font-size:0.85rem; color:var(--text-muted);'><strong>Note:</strong> Data masking settings (below) do not apply to the Integrity Manifest. The manifest must remain unmasked to preserve cryptographic validity.</p>", unsafe_allow_html=True)
+                st.download_button("Download Integrity Manifest (Unmasked)", data=manifest_json, file_name=f"manifest_{email_hash}.json", mime="application/json")
+
+            section_header("Export Reports", "blue")
+            st.markdown("<p style='font-size:0.85rem; color:var(--text-muted); margin-top:-8px; margin-bottom:12px;'>Download the forensic analysis report in various formats.</p>", unsafe_allow_html=True)
+
+            mask_data = st.checkbox("Mask sensitive data in exports", value=False, key="mask_analysis_export")
+
+            from modules.report_generator import generate_json_report, generate_html_report, generate_pdf_report
+
+            rc1, rc2, rc3 = st.columns(3)
+            # Reconstruct basic case_data structure for report generator
+            # This matches the schema used by session_case_store and report_generator
+            current_case_data = {
+                "case_id": "Unsaved Analysis",
+                "filename": filename,
+                "email_hash": email_hash,
+                "subject": parsed_data.get("subject", "N/A"),
+                "sender_address": parsed_data.get("sender", "N/A"),
+                "sender_domain": parsed_data.get("sender_domain", "N/A"),
+                "probable_origin_ip": relay_analysis.get("probable_origin_ip") if "relay_analysis" in locals() else "N/A",
+                "analyzer_results": {
+                    "header_analysis": analysis,
+                    "content_analysis": content_analysis,
+                    "geo_result": st.session_state.get('geo_result', {}),
+                    "domain_result": st.session_state.get('domain_result', {}),
+                    "fraud_score": fraud_score,
+                    "attachment_analysis": attachment_analysis,
+                    "evidence_manifest": evidence_manifest or {}
+                },
+                "risk_level": fraud_score.get("risk_level", "Unknown"),
+                "verdict": fraud_score.get("verdict", "Unknown"),
+                "confidence": fraud_score.get("confidence", "Unknown"),
+            }
+
+            with rc1:
+                json_bytes = generate_json_report(current_case_data, mask_data=mask_data)
+                st.download_button("Download JSON Report", data=json_bytes, file_name=f"report_{email_hash}.json", mime="application/json")
+            with rc2:
+                html_bytes = generate_html_report(current_case_data, mask_data=mask_data)
+                st.download_button("Download HTML Report", data=html_bytes, file_name=f"report_{email_hash}.html", mime="text/html")
+            with rc3:
+                pdf_bytes = generate_pdf_report(current_case_data, mask_data=mask_data)
+                st.download_button("Download PDF Report", data=pdf_bytes, file_name=f"report_{email_hash}.pdf", mime="application/pdf")
 
 footer()

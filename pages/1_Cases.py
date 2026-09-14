@@ -77,10 +77,12 @@ else:
                 st.markdown(html_block, unsafe_allow_html=True)
 
             st.markdown("### Download Forensic Report")
+            mask_data = st.checkbox("Mask sensitive data in exports", value=False, key=f"mask_{selected_id}")
+
             c1, c2, c3 = st.columns(3)
 
             with c1:
-                json_bytes = generate_json_report(case_data)
+                json_bytes = generate_json_report(case_data, mask_data=mask_data)
                 st.download_button(
                     label="Download JSON Report",
                     data=json_bytes,
@@ -89,7 +91,7 @@ else:
                 )
 
             with c2:
-                html_bytes = generate_html_report(case_data)
+                html_bytes = generate_html_report(case_data, mask_data=mask_data)
                 st.download_button(
                     label="Download HTML Report",
                     data=html_bytes,
@@ -98,7 +100,7 @@ else:
                 )
 
             with c3:
-                pdf_bytes = generate_pdf_report(case_data)
+                pdf_bytes = generate_pdf_report(case_data, mask_data=mask_data)
                 st.download_button(
                     label="Download PDF Report",
                     data=pdf_bytes,

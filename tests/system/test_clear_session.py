@@ -179,14 +179,18 @@ class TestClearAllSessionData:
         assert state_b.get("geo_result") is not None
 
     def test_clear_triggers_no_network(self, monkeypatch):
-        def _block(*args, **kwargs):
-            raise AssertionError("clear_all_session_data made a network call")
-        monkeypatch.setattr(socket, "create_connection", _block)
-        monkeypatch.setattr(socket, "getaddrinfo", _block)
-        monkeypatch.setattr(socket.socket, "connect", _block)
+        from unittest.mock import MagicMock
+        mock_connect = MagicMock(side_effect=socket.socket.connect)
+        mock_getaddrinfo = MagicMock(side_effect=socket.getaddrinfo)
+        monkeypatch.setattr(socket.socket, "connect", mock_connect)
+        monkeypatch.setattr(socket, "getaddrinfo", mock_getaddrinfo)
+
         _populate_sensitive(st.session_state)
         clear_all_session_data()
         assert st.session_state["_cases"] == []
+
+        mock_connect.assert_not_called()
+        mock_getaddrinfo.assert_not_called()
 
     def test_save_case_then_clear(self):
         save_case(_make_case("hash001"))

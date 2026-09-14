@@ -2,3 +2,4 @@ pytest
 ruff
 bandit
 pip-audit
+pytest-socket==0.8.1

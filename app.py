@@ -87,7 +87,11 @@ def get_demo_file_data(demo_key: str):
 
 app_header()
 
-uploaded_file = st.file_uploader("Upload an .eml file", type=["eml"])
+uploaded_file = st.file_uploader(
+    "Upload an .eml file",
+    type=["eml"],
+    key=f"email_upload_{st.session_state.get('_uploader_key', 0)}"
+)
 
 st.markdown("### Try a safe demo")
 st.caption("Explore MailTrace AI using synthetic emails. Demo analysis runs offline and does not use your Gemini quota.")

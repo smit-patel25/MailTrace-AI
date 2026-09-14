@@ -19,6 +19,77 @@ def _init_store():
     if "_campaigns" not in st.session_state:
         st.session_state["_campaigns"] = []
 
+# Keys that must survive a session clear (rate-limit / abuse-prevention counters).
+_PRESERVED_KEYS = frozenset({
+    "gemini_attempts",
+    "gemini_successes",
+    "gemini_failures",
+})
+
+def clear_all_session_data() -> None:
+    """
+    Remove all sensitive analysis state from this session.
+
+    Clears:
+    - Saved cases and campaigns
+    - Uploaded-email source selection and cached filename
+    - Per-email geolocation, domain-intelligence and AI results
+    - Per-email evidence manifests and AI consent flags
+    - Upload and demo widget selection state
+    - Campaign-view selection
+
+    Preserves:
+    - gemini_attempts / gemini_successes / gemini_failures (rate-limit counters)
+    - Any Streamlit-internal keys (prefixed with underscore reserved by Streamlit)
+
+    Note: This clears in-session memory only.  Files already downloaded to the
+    user's device are not affected.  The operation does not claim secure memory
+    erasure; Python's garbage collector governs object deallocation.
+    """
+    _init_store()
+
+    # Wipe case and campaign stores.
+    st.session_state["_cases"] = []
+    st.session_state["_campaigns"] = []
+
+    # Collect every key we own that is not in the preserved set.
+    _SENSITIVE_PREFIXES = (
+        "gemini_",          # per-email AI results, locks, cooldowns, consent
+        "evidence_manifest_",  # per-email evidence manifests
+    )
+    _SENSITIVE_EXACT = {
+        "active_source",
+        "active_demo_key",
+        "last_uploaded_name",
+        "current_file_name",
+        "geo_result",
+        "domain_result",
+        "view_campaign",
+    }
+
+    keys_to_remove = []
+    for k in list(st.session_state.keys()):
+        if k in _PRESERVED_KEYS:
+            continue
+        if k in _SENSITIVE_EXACT:
+            keys_to_remove.append(k)
+            continue
+        if any(k.startswith(pfx) for pfx in _SENSITIVE_PREFIXES):
+            # Skip quota counters even if they start with "gemini_"
+            # Also preserve abuse-prevention locks and cooldowns
+            if k in _PRESERVED_KEYS or k.startswith("gemini_lock_") or k.startswith("gemini_cooldown_"):
+                continue
+            keys_to_remove.append(k)
+
+    for k in keys_to_remove:
+        st.session_state.pop(k, None)
+
+    # Bump the uploader widget key so that Streamlit resets the file_uploader
+    # widget on the next rerun, preventing a cached upload from repopulating
+    # cleared analysis state.
+    prev = st.session_state.get("_uploader_key", 0)
+    st.session_state["_uploader_key"] = (prev + 1) if isinstance(prev, int) else 1
+
 def save_case(case_data: dict) -> str:
     _init_store()
 

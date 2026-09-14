@@ -276,17 +276,19 @@ def test_nan_and_infinity_fail_serialization(bad_val):
         generate_canonical_hash(manifest)
 
 def test_manifest_operations_zero_network(monkeypatch):
-    def block_network(*args, **kwargs):
-        raise AssertionError("Network access is blocked")
-
-    monkeypatch.setattr(socket, "create_connection", block_network)
-    monkeypatch.setattr(socket, "getaddrinfo", block_network)
-    monkeypatch.setattr(socket.socket, "connect", block_network)
+    from unittest.mock import MagicMock
+    mock_connect = MagicMock(side_effect=socket.socket.connect)
+    mock_getaddrinfo = MagicMock(side_effect=socket.getaddrinfo)
+    monkeypatch.setattr(socket.socket, "connect", mock_connect)
+    monkeypatch.setattr(socket, "getaddrinfo", mock_getaddrinfo)
 
     manifest = build_evidence_manifest(b"abc", "test.eml", "2023-10-01T12:00:00Z", "1.0", [])
     assert verify_evidence_manifest(manifest, b"abc")["status"] == "Original Evidence Verified"
     safe = extract_safe_manifest(manifest)
     assert safe["email_sha256"] == manifest["email_sha256"]
+
+    mock_connect.assert_not_called()
+    mock_getaddrinfo.assert_not_called()
 
 def test_legacy_cases_remain_supported():
     case_data = {

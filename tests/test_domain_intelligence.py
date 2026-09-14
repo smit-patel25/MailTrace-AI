@@ -84,8 +84,10 @@ def test_missing_records_and_cached(mock_whois, mock_resolve):
     res2 = analyze_domain("missing.com")
     assert mock_whois.call_count == 1 # still 1
 
+@patch('modules.domain_intelligence.dns.resolver.Resolver.resolve')
 @patch('modules.domain_intelligence.whois.whois')
-def test_whois_tz_aware_date(mock_whois):
+def test_whois_tz_aware_date(mock_whois, mock_resolve):
+    mock_resolve.side_effect = dns.exception.DNSException("DNS timeout")
     # Some WHOIS returns tz-aware dates
     mock_w = Mock()
     mock_w.registrar = None

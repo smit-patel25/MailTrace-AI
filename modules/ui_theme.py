@@ -600,6 +600,17 @@ def apply_theme():
             color:       var(--text-primary) !important;
         }}
 
+        @media (max-width: 576px) {{
+            .component-card {{
+                margin-bottom: 12px !important;
+                padding: 0.6rem 0.8rem !important;
+                height: auto !important;
+            }}
+            .mt-spacer {{
+                display: none !important;
+            }}
+        }}
+
         /* ================================================================
            BUTTONS
            ================================================================ */

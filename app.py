@@ -907,9 +907,9 @@ if raw_bytes is not None:
                 "filename": filename,
                 "email_hash": email_hash,
                 "subject": parsed_data.get("subject", "N/A"),
-                "sender_address": parsed_data.get("sender", "N/A"),
-                "sender_domain": parsed_data.get("sender_domain", "N/A"),
-                "probable_origin_ip": relay_analysis.get("probable_origin_ip") if "relay_analysis" in locals() else "N/A",
+                "sender_address": parsed_data.get("from", ""),
+                "sender_domain": analysis["extracted_domains"].get("from_domain", "") if "analysis" in locals() else "",
+                "probable_origin_ip": relay_analysis.get("probable_origin_ip") if "relay_analysis" in locals() else "",
                 "analyzer_results": {
                     "header_analysis": analysis,
                     "content_analysis": content_analysis,

@@ -11,7 +11,11 @@ from modules.evidence_integrity import extract_safe_manifest
 def generate_report_id():
     return datetime.now(timezone.utc).strftime("REPORT-%Y%m%d-") + uuid.uuid4().hex[:4].upper()
 
-def extract_safe_data(case_data):
+def extract_safe_data(case_data, mask_data=False):
+    if mask_data:
+        from modules.data_masking import mask_case_data
+        case_data = mask_case_data(case_data)
+
     timestamp = datetime.now(timezone.utc).isoformat()
     results = case_data.get('analyzer_results', {})
     header_res = results.get('header_analysis', {})
@@ -21,7 +25,7 @@ def extract_safe_data(case_data):
     f_score = results.get('fraud_score', {})
 
     safe_data = {
-        "report_title": "MailTrace Forensic Analysis Report",
+        "report_title": "MailTrace Forensic Analysis Report (MASKED)" if mask_data else "MailTrace Forensic Analysis Report",
         "report_id": generate_report_id(),
         "case_id": case_data.get("case_id", "N/A"),
         "generated_timestamp": timestamp,
@@ -56,7 +60,6 @@ def extract_safe_data(case_data):
             }
             for a in results.get("attachment_analysis", {}).get("attachments", [])
         ],
-        "evidence_manifest": extract_safe_manifest(results.get("evidence_manifest", {})),
         "disclaimers": [
             "Geolocation represents estimated infrastructure location.",
             "Authentication header values may be reported rather than independently verified.",
@@ -66,6 +69,15 @@ def extract_safe_data(case_data):
             "Assessment is for investigative support."
         ]
     }
+
+    if mask_data:
+        safe_data["evidence_manifest"] = None
+        safe_data["disclaimers"].append(
+            "SENSITIVE DATA MASKING ENABLED: The original evidence integrity manifest is omitted because it does not verify this masked report. Masking reduces exposure but does not guarantee anonymity."
+        )
+    else:
+        safe_data["evidence_manifest"] = extract_safe_manifest(results.get("evidence_manifest", {}))
+
 
     if "indicators" in header_res: safe_data["key_indicators"].extend(header_res["indicators"])
     if "indicators" in content_res: safe_data["key_indicators"].extend(content_res["indicators"])
@@ -88,12 +100,12 @@ def extract_safe_data(case_data):
 
     return safe_data
 
-def generate_json_report(case_data) -> bytes:
-    data = extract_safe_data(case_data)
+def generate_json_report(case_data, mask_data=False) -> bytes:
+    data = extract_safe_data(case_data, mask_data=mask_data)
     return json.dumps(data, indent=2).encode('utf-8')
 
-def generate_html_report(case_data) -> bytes:
-    data = extract_safe_data(case_data)
+def generate_html_report(case_data, mask_data=False) -> bytes:
+    data = extract_safe_data(case_data, mask_data=mask_data)
 
     html_content = f"""<!DOCTYPE html>
 <html>
@@ -209,8 +221,8 @@ th {{ background-color: #f2f2f2; width: 30%; }}
     html_content += "</body></html>"
     return html_content.encode('utf-8')
 
-def generate_pdf_report(case_data) -> bytes:
-    data = extract_safe_data(case_data)
+def generate_pdf_report(case_data, mask_data=False) -> bytes:
+    data = extract_safe_data(case_data, mask_data=mask_data)
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter)
     styles = getSampleStyleSheet()

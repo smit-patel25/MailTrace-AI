@@ -32,11 +32,11 @@ def extract_safe_data(case_data, mask_data=False):
         "filename": case_data.get("filename", "N/A"),
         "email_hash": case_data.get("email_hash", "N/A"),
         "subject": case_data.get("subject", "N/A"),
-        "sender": case_data.get("sender_address", "N/A"),
-        "sender_domain": case_data.get("sender_domain", "N/A"),
+        "sender": case_data.get("sender_address") or "N/A",
+        "sender_domain": case_data.get("sender_domain") or "N/A",
         "probable_origin_ip": case_data.get("probable_origin_ip", "N/A"),
         "campaign_id": case_data.get("campaign_id", "N/A"),
-        "fraud_score": case_data.get("fraud_score", 0),
+        "fraud_score": f_score["final_score"] if "final_score" in f_score else case_data.get("fraud_score", 0),
         "corroboration_bonus": f_score.get("corroboration_bonus", 0),
         "risk_level": case_data.get("risk_level", "Unknown"),
         "verdict": case_data.get("verdict", "Unknown"),
@@ -137,14 +137,14 @@ th {{ background-color: #f2f2f2; width: 30%; }}
 <h2>General Information</h2>
 <table>
 <tr><th>Report ID</th><td>{html.escape(data['report_id'])}</td></tr>
-<tr><th>Case ID</th><td>{html.escape(str(data['case_id']))}</td></tr>
+<tr><th>Case ID</th><td>{html.escape(str(data['case_id'] if data['case_id'] not in (None, "", "N/A") else 'Not assigned'))}</td></tr>
 <tr><th>Generated At (UTC)</th><td>{html.escape(data['generated_timestamp'])}</td></tr>
 <tr><th>Uploaded File</th><td>{html.escape(str(data['filename']))}</td></tr>
-<tr><th>SHA-256 Hash</th><td>{html.escape(str(data['email_hash']))}</td></tr>
+<tr><th>Original Email SHA-256</th><td>{html.escape(str(data['email_hash']))}</td></tr>
 <tr><th>Subject</th><td>{html.escape(str(data['subject']))}</td></tr>
 <tr><th>Sender</th><td>{html.escape(str(data['sender']))}</td></tr>
 <tr><th>Sender Domain</th><td>{html.escape(str(data['sender_domain']))}</td></tr>
-<tr><th>Origin IP</th><td>{html.escape(str(data['probable_origin_ip']))}</td></tr>
+<tr><th>Origin IP</th><td>{html.escape(str(data['probable_origin_ip'] if data['probable_origin_ip'] not in (None, "", "N/A") else 'Unavailable'))}</td></tr>
 <tr><th>Campaign ID</th><td>{html.escape(str(data['campaign_id']))}</td></tr>
 </table>
 
@@ -167,7 +167,7 @@ th {{ background-color: #f2f2f2; width: 30%; }}
 <h2>Evidence Integrity Manifest</h2>
 <table>
 <tr><th>Manifest Version</th><td>{html.escape(str(manifest.get('manifest_version')))}</td></tr>
-<tr><th>Case ID</th><td>{html.escape(str(manifest.get('case_id')))}</td></tr>
+<tr><th>Case ID</th><td>{html.escape(str(manifest.get('case_id') or 'Not assigned'))}</td></tr>
 <tr><th>Source Filename</th><td>{html.escape(str(manifest.get('source_filename')))}</td></tr>
 <tr><th>Integrity Status</th><td>{html.escape(str(manifest.get('integrity_status')))}</td></tr>
 <tr><th>Email SHA-256</th><td><code style='font-size:0.8em; word-wrap:break-word; word-break:break-all;'>{html.escape(str(manifest.get('email_sha256')))}</code></td></tr>
@@ -245,13 +245,13 @@ def generate_pdf_report(case_data, mask_data=False) -> bytes:
     elements.append(Paragraph("General Information", heading_style))
     info_lines = [
         f"<b>Report ID:</b> {html.escape(data['report_id'])}",
-        f"<b>Case ID:</b> {html.escape(str(data['case_id']))}",
+        f"<b>Case ID:</b> {html.escape(str(data['case_id'] if data['case_id'] not in (None, '', 'N/A') else 'Not assigned'))}",
         f"<b>Generated At (UTC):</b> {html.escape(data['generated_timestamp'])}",
         f"<b>Uploaded File:</b> {html.escape(str(data['filename']))}",
-        f"<b>SHA-256 Hash:</b> {html.escape(str(data['email_hash']))}",
+        f"<b>Original Email SHA-256:</b> {html.escape(str(data['email_hash']))}",
         f"<b>Subject:</b> {html.escape(str(data['subject']))}",
         f"<b>Sender:</b> {html.escape(str(data['sender']))}",
-        f"<b>Origin IP:</b> {html.escape(str(data['probable_origin_ip']))}",
+        f"<b>Origin IP:</b> {html.escape(str(data['probable_origin_ip'] if data['probable_origin_ip'] not in (None, '', 'N/A') else 'Unavailable'))}",
         f"<b>Campaign ID:</b> {html.escape(str(data['campaign_id']))}"
     ]
     for line in info_lines:
@@ -281,7 +281,7 @@ def generate_pdf_report(case_data, mask_data=False) -> bytes:
         elements.append(Paragraph("Evidence Integrity Manifest", heading_style))
         manifest_lines = [
             f"<b>Manifest Version:</b> {html.escape(str(manifest.get('manifest_version')))}",
-            f"<b>Case ID:</b> {html.escape(str(manifest.get('case_id')))}",
+            f"<b>Case ID:</b> {html.escape(str(manifest.get('case_id') or 'Not assigned'))}",
             f"<b>Source Filename:</b> {html.escape(str(manifest.get('source_filename')))}",
             f"<b>Integrity Status:</b> {html.escape(str(manifest.get('integrity_status')))}",
             f"<b>Email Size:</b> {html.escape(str(manifest.get('email_size')))} B",

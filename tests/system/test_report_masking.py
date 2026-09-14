@@ -176,7 +176,7 @@ def test_app_analysis_export_path_with_masking():
 
     try:
         app_path = os.path.join(os.path.dirname(__file__), "..", "..", "app.py")
-        fixture_path = os.path.join(os.path.dirname(__file__), "..", "fixtures", "valid_plain.eml")
+        fixture_path = os.path.join(os.path.dirname(__file__), "..", "fixtures", "synthetic_wallet_phishing.eml")
 
         with open(fixture_path, "rb") as f:
             file_bytes = f.read()
@@ -209,12 +209,13 @@ def test_app_analysis_export_path_with_masking():
         with unittest.mock.patch('modules.report_generator.generate_json_report', side_effect=spy_json), \
              unittest.mock.patch('modules.report_generator.generate_html_report', side_effect=spy_html), \
              unittest.mock.patch('modules.report_generator.generate_pdf_report', side_effect=spy_pdf), \
-             unittest.mock.patch('modules.evidence_integrity.build_evidence_manifest', side_effect=spy_build):
+             unittest.mock.patch('modules.evidence_integrity.build_evidence_manifest', side_effect=spy_build), \
+             unittest.mock.patch('modules.geolocation.geolocate_ip', return_value={"country": "Mock Country", "city": "Mock City"}):
 
             at = AppTest.from_file(app_path, default_timeout=15).run()
 
             at.file_uploader[0].set_value(
-                ("valid_plain.eml", file_bytes, "message/rfc822")
+                ("synthetic_wallet_phishing.eml", file_bytes, "message/rfc822")
             ).run()
 
             # Click the Analyze Email button (which has an emoji)
@@ -252,8 +253,11 @@ def test_app_analysis_export_path_with_masking():
 
             # Ensure expected scores and masked fields are correct in the final output
             assert masked_json["filename"].startswith("[FILE")
-            assert masked_json["filename"] != "valid_plain.eml"
-            assert "fraud_score" in masked_json
+            assert masked_json["filename"] != "synthetic_wallet_phishing.eml"
+
+            actual_analysis_score = captured_case.get("analyzer_results", {}).get("fraud_score", {}).get("final_score")
+            assert actual_analysis_score is not None and actual_analysis_score > 0, "Expected a nonzero analysis score for this sample"
+            assert masked_json["fraud_score"] == actual_analysis_score, "Exported JSON must exactly match the nonzero Analysis score"
 
     finally:
         if old_db_path:
@@ -428,3 +432,200 @@ def test_app_current_case_data_schema():
     assert report.get('scoring_version') == '1.0'
     assert report['geolocation']['country'] == 'US'
     assert report['domain_intelligence']['domain_age_days'] == 100
+
+
+def test_app_analysis_export_score_preservation():
+    """Ensure the numeric final_score from the UI's analyzer_results is exactly
+    the score exported to JSON, HTML, and PDF, regardless of masking.
+    Checking that the key merely exists is insufficient."""
+    current_case_data = {
+        'case_id': 'Unsaved Analysis',
+        'filename': 'phishing.eml',
+        'email_hash': 'abcdef123456',
+        'subject': 'Urgent',
+        'sender_address': 'attacker@evil.com',
+        'sender_domain': 'evil.com',
+        'probable_origin_ip': '1.2.3.4',
+        'analyzer_results': {
+            'header_analysis': {'indicators': []},
+            'content_analysis': {'defanged_urls': []},
+            'geo_result': {},
+            'domain_result': {},
+            'fraud_score': {
+                'final_score': 85,
+                'scoring_version': '1.1',
+                'component_scores': {'header_risk': 35, 'content_risk': 20}
+            },
+            'attachment_analysis': {'attachments': []},
+            'evidence_manifest': {}
+        },
+        'risk_level': 'High',
+        'verdict': 'Likely Malicious',
+        'confidence': 'High'
+    }
+
+    for mask in (False, True):
+        # JSON
+        json_bytes = generate_json_report(current_case_data, mask_data=mask)
+        report = json.loads(json_bytes.decode('utf-8'))
+        assert report['fraud_score'] == 85, f"JSON mask={mask} wrong score"
+
+        # HTML
+        html_bytes = generate_html_report(current_case_data, mask_data=mask).decode()
+        assert "<th>Fraud Score</th><td>85</td>" in html_bytes, f"HTML mask={mask} wrong score"
+
+        # PDF
+        pdf_text = extract_pdf_text_streams(generate_pdf_report(current_case_data, mask_data=mask))
+        assert "(Fraud Score:) Tj" in pdf_text, f"PDF mask={mask} missing label"
+        assert "( 85) Tj" in pdf_text, f"PDF mask={mask} missing value"
+
+
+
+# ---------------------------------------------------------------------------
+# Regression: sender field mapping and display label fixes
+# ---------------------------------------------------------------------------
+
+def _make_case_with_sender(sender_address, origin_ip=None, case_id=None):
+    """Build a minimal case_data dict matching the app.py current_case_data schema."""
+    return {
+        "case_id": case_id,
+        "filename": "test.eml",
+        "email_hash": "aabbccdd",
+        "subject": "Hello",
+        "sender_address": sender_address,
+        "sender_domain": "company.example" if sender_address else "",
+        "probable_origin_ip": origin_ip,
+        "analyzer_results": {
+            "header_analysis": {"indicators": []},
+            "content_analysis": {"defanged_urls": [], "original_urls": []},
+            "geo_result": {},
+            "domain_result": {},
+            "fraud_score": {"scoring_version": "1.0", "component_scores": {}},
+            "attachment_analysis": {"attachments": []},
+            "evidence_manifest": {},
+        },
+        "risk_level": "Low",
+        "verdict": "Legitimate",
+        "confidence": "High",
+    }
+
+
+def test_sender_from_from_header_in_all_report_formats():
+    """When sender_address is populated from the From header, all three export
+    formats must include it — not 'N/A'."""
+    case = _make_case_with_sender("alex@company.example")
+    # JSON
+    report = json.loads(generate_json_report(case).decode())
+    assert report["sender"] == "alex@company.example", f"JSON sender wrong: {report['sender']}"
+
+    # HTML
+    html_bytes = generate_html_report(case).decode()
+    assert "alex@company.example" in html_bytes
+
+    # PDF (text stream extraction)
+    pdf_text = extract_pdf_text_streams(generate_pdf_report(case))
+    assert "alex@company.example" in pdf_text
+
+
+def test_missing_from_header_produces_na():
+    """When sender_address is absent (empty string / None), reports must show
+    'N/A', not crash or leak a raw Python 'None'."""
+    for empty_val in ("", None):
+        case = _make_case_with_sender(empty_val)
+        report = json.loads(generate_json_report(case).decode())
+        assert report["sender"] == "N/A", f"Expected N/A for sender, got: {report['sender']}"
+
+        html_bytes = generate_html_report(case).decode()
+        # Must not contain literal "None" as a sender value
+        assert "<th>Sender</th><td>None</td>" not in html_bytes
+
+
+def test_masked_report_replaces_sender_with_placeholder():
+    """Masking must replace the sender email address in all report formats.
+    The sender_address field itself must be replaced; sender_domain is a
+    separate field handled by the existing domain masking path."""
+    case = _make_case_with_sender("alex@company.example")
+    # JSON
+    report = json.loads(generate_json_report(case, mask_data=True).decode())
+    assert "alex@company.example" not in json.dumps(report)
+    # sender field must be a placeholder, not the real address
+    assert report["sender"] != "alex@company.example"
+    assert "@" not in report["sender"] or "[EMAIL-" in report["sender"]
+
+    # HTML
+    html_bytes = generate_html_report(case, mask_data=True).decode()
+    assert "alex@company.example" not in html_bytes
+
+    # PDF
+    pdf_text = extract_pdf_text_streams(generate_pdf_report(case, mask_data=True))
+    assert "alex@company.example" not in pdf_text
+
+
+def test_display_labels_origin_ip_unavailable():
+    """HTML/PDF show 'Unavailable' when probable_origin_ip is absent.
+    JSON substitutes missing with 'N/A' but preserves explicit None or empty string."""
+    scenarios = [
+        ("missing", "N/A"),
+        (None, None),
+        ("", "")
+    ]
+    for val, expected_json in scenarios:
+        case = _make_case_with_sender("alex@company.example")
+        if val == "missing":
+            case.pop("probable_origin_ip", None)
+        else:
+            case["probable_origin_ip"] = val
+
+        # JSON: defaults or raw value
+        report = json.loads(generate_json_report(case).decode())
+        assert report["probable_origin_ip"] == expected_json, (
+            f"JSON mismatch for {val!r}: expected {expected_json!r}, got {report['probable_origin_ip']!r}"
+        )
+
+        # HTML: display fallback applied at render time
+        html_bytes = generate_html_report(case).decode()
+        assert "<th>Origin IP</th><td>Unavailable</td>" in html_bytes
+
+        # PDF: display fallback applied at render time
+        pdf_text = extract_pdf_text_streams(generate_pdf_report(case))
+        assert "Unavailable" in pdf_text
+
+
+def test_display_labels_case_id_not_assigned():
+    """HTML/PDF show 'Not assigned' when case_id is None.
+    JSON substitutes missing with 'N/A' but preserves explicit None or empty string."""
+    scenarios = [
+        ("missing", "N/A"),
+        (None, None),
+        ("", "")
+    ]
+    for val, expected_json in scenarios:
+        case = _make_case_with_sender("alex@company.example")
+        if val == "missing":
+            case.pop("case_id", None)
+        else:
+            case["case_id"] = val
+
+        # JSON: defaults or raw value
+        report = json.loads(generate_json_report(case).decode())
+        assert report["case_id"] == expected_json, (
+            f"JSON mismatch for {val!r}: expected {expected_json!r}, got {report['case_id']!r}"
+        )
+
+        # HTML: display fallback applied at render time
+        html_bytes = generate_html_report(case).decode()
+        assert "<th>Case ID</th><td>Not assigned</td>" in html_bytes
+
+        # PDF: display fallback applied at render time
+        pdf_text = extract_pdf_text_streams(generate_pdf_report(case))
+        assert "Not assigned" in pdf_text
+
+
+def test_display_label_email_hash_sha256():
+    """General information table must label the hash 'Original Email SHA-256'."""
+    case = _make_case_with_sender("alex@company.example")
+    html_bytes = generate_html_report(case).decode()
+    assert "Original Email SHA-256" in html_bytes
+
+    pdf_text = extract_pdf_text_streams(generate_pdf_report(case))
+    assert "Original Email SHA-256" in pdf_text

@@ -488,3 +488,68 @@ def test_maximum_signals_capped_at_100():
     assert res["corroboration_bonus"] == 30
     # Total would be 35 + 25 + 20 + 20 + 50 + 30 = 180. Must be capped at 100.
     assert res["final_score"] == 100
+
+@pytest.mark.parametrize(
+    "hostname, geo_dict, expected_infra, expected_reason",
+    [
+        # Google + Google org -> 0
+        ("google.com", {"available": True, "location": {"org": "Google LLC", "as": "AS15169"}}, 0, "Recognized email delivery infrastructure"),
+        # Outlook + Microsoft org -> 0
+        ("outlook.com", {"available": True, "location": {"org": "Microsoft Corporation", "as": "AS8075"}}, 0, "Recognized email delivery infrastructure"),
+        # Amazon SES + Amazon org -> 0
+        ("amazonses.com", {"available": True, "location": {"org": "Amazon.com Services LLC", "as": "AS16509"}}, 0, "Recognized email delivery infrastructure"),
+
+        # Trusted hostname + different organization -> 20 (Deceptive)
+        ("google.com", {"available": True, "location": {"org": "Evil Corp", "as": "AS666"}}, 20, "Claimed trusted delivery hostname does not match the reported network organization."),
+        ("outlook.com", {"available": True, "location": {"org": "Evil Corp", "as": "AS666"}}, 20, "Claimed trusted delivery hostname does not match the reported network organization."),
+        ("amazonses.com", {"available": True, "location": {"org": "Evil Corp", "as": "AS666"}}, 20, "Claimed trusted delivery hostname does not match the reported network organization."),
+
+        # google.com.attacker.test never qualifies as Google
+        ("google.com.attacker.test", {"available": True, "location": {"org": "Google LLC", "as": "AS15169"}}, 0, None),
+        ("google.com.attacker.test", {"available": True, "location": {"org": "Evil Corp", "as": "AS666"}}, 0, None),
+
+        # Missing org/ASN -> no exemption, no penalty
+        ("google.com", {"available": True}, 0, None),
+
+        # Unavailable -> no exemption, no penalty
+        ("google.com", {"available": False, "location": {"org": "Google", "as": "AS123"}}, 0, None),
+        ("google.com", {"available": "false", "location": {"org": "Google", "as": "AS123"}}, 0, None), # string "false"
+
+        # Empty org/ASN -> no exemption, no penalty
+        ("google.com", {"available": True, "location": {"org": "", "as": " "}}, 0, None),
+
+        # Empty org with ASN number only -> no exemption, no penalty
+        ("google.com", {"available": True, "location": {"org": "", "as": "AS15169"}}, 0, None),
+
+        # Malformed org/ASN -> no exemption, no penalty
+        ("google.com", {"available": True, "location": "not a dict"}, 0, None),
+
+        # Invalid types -> no exemption, no penalty
+        ("google.com", {"available": True, "location": {"org": None, "as": None}}, 0, None),
+        ("google.com", {"available": True, "location": {"org": False, "as": []}}, 0, None),
+        ("google.com", {"available": True, "location": {"org": {}, "as": 123}}, 0, None),
+    ]
+)
+def test_infrastructure_deceptive_relay(hostname, geo_dict, expected_infra, expected_reason):
+    header = f"from {hostname} (unknown [203.0.113.1])"
+    res = calculate_fraud_score(
+        header_analysis={},
+        content_analysis={},
+        relay_analysis={"probable_origin_ip": "203.0.113.1", "original_received_headers": [header]},
+        geolocation_result=geo_dict
+    )
+
+    assert res["component_scores"]["infrastructure_risk"] == expected_infra
+    if expected_infra == 0 and not expected_reason:
+        # Should have 0 final score as well, since everything else is empty
+        assert res["final_score"] == 0
+    else:
+        assert res["final_score"] == expected_infra
+
+    if expected_reason:
+        reason_found = any(expected_reason in reason for reason in res["top_reasons"])
+        assert reason_found, f"Expected reason '{expected_reason}' not found in top_reasons: {res['top_reasons']}"
+    else:
+        # Make sure deceptive routing or recognized infra reason is NOT there
+        reason_found = any("delivery infrastructure claims a trusted identity" in r.lower() or "recognized email delivery" in r.lower() or "claimed trusted delivery" in r.lower() for r in res["top_reasons"])
+        assert not reason_found, f"Unexpected reason found in top_reasons: {res['top_reasons']}"

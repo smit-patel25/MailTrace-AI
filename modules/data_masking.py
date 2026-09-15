@@ -27,7 +27,7 @@ SCHEMA_KEYS = {
     'sha256', 'reasons', 'manifest_version', 'email_sha256', 'integrity_status',
     'analysis_timestamp', 'manifest_sha256', 'body_text', 'body_html',
     'analysis_text', 'body', 'available', 'content_type', 'final_score',
-    'reported_auth_statuses', 'severity', 'explanation', 'error'
+    'reported_auth_statuses', 'severity', 'explanation', 'error', 'sanitized_text'
 }
 
 def is_valid_ip(val: str) -> bool:
@@ -161,7 +161,9 @@ class DataMasker:
             else:
                 masked_k = self.walk(k, mask_filenames=False) if isinstance(k, str) else k
 
-            if k in ('subject', 'body_text', 'body_html', 'analysis_text', 'body'):
+            OMITTED_BODY_FIELDS = ('subject', 'body_text', 'body_html', 'analysis_text', 'body', 'sanitized_text')
+
+            if k in OMITTED_BODY_FIELDS:
                 result[masked_k] = "[OMITTED]"
             elif k in ('filename', 'source_filename', 'sender', 'sender_address', 'sender_domain', 'probable_origin_ip'):
                 if isinstance(v, str) and v and v != "N/A":

@@ -61,6 +61,10 @@ def complex_case():
                 "defanged_urls": [
                     "hxxps://admin:password123@evil.com/login.php?session=abc#token",
                     "http://10.0.0.1/malware.exe"
+                ],
+                "sanitized_text": "MY_PRIVATE_PASSWORD_123 SSN: 000-00-0000 BANK_ACCOUNT_999",
+                "indicators": [
+                    {"severity": "medium", "explanation": "credential request or password mentioned"}
                 ]
             },
             "attachment_analysis": {
@@ -81,8 +85,9 @@ def complex_case():
 def test_masking_does_not_mutate_original(complex_case):
     import copy
     original_copy = copy.deepcopy(complex_case)
-    mask_case_data(complex_case)
+    masked = mask_case_data(complex_case)
     assert complex_case == original_copy
+    assert masked["analyzer_results"]["content_analysis"]["sanitized_text"] == "[OMITTED]"
 
 def test_masking_off_preserves_data(complex_case):
     json_bytes = generate_json_report(complex_case, mask_data=False)
@@ -94,6 +99,7 @@ def test_masking_off_preserves_data(complex_case):
     assert "attacker@evil.com" in text
     assert "2001:0db8:85a3:0000:0000:8a2e:0370:7334" in text
     assert "password123" in text
+    assert "credential request or password mentioned" in text
     # Evidence manifest should be present
     assert "evidence_manifest" in text
     assert "deadbeef1234" in text
@@ -111,6 +117,12 @@ def test_masking_json_report_leakage(complex_case):
     assert "2001:0db8:85a3:0000:0000:8a2e:0370:7334" not in text
     assert "password123" not in text
     assert "session=abc" not in text
+    assert "MY_PRIVATE_PASSWORD_123" not in text
+    assert "000-00-0000" not in text
+    assert "BANK_ACCOUNT_999" not in text
+
+    # Valid indicator explanations must survive masking
+    assert "credential request or password mentioned" in text
 
     # Non-sensitive structure should be preserved
     assert "CASE-999" in text
@@ -136,6 +148,12 @@ def test_masking_html_report_leakage(complex_case):
     assert "attacker@evil.com" not in text
     assert "2001:0db8:85a3:0000:0000:8a2e:0370:7334" not in text
     assert "password123" not in text
+    assert "MY_PRIVATE_PASSWORD_123" not in text
+    assert "000-00-0000" not in text
+    assert "BANK_ACCOUNT_999" not in text
+
+    # Valid indicator explanations must survive masking
+    assert "credential request or password mentioned" in text
 
     assert "CASE-999" in text
     assert "SENSITIVE DATA MASKING ENABLED" in text
@@ -158,6 +176,12 @@ def test_masking_pdf_report_leakage(complex_case):
     assert "attacker@evil.com" not in pdf_text
     assert "2001:0db8:85a3:0000:0000:8a2e:0370:7334" not in pdf_text
     assert "password123" not in pdf_text
+    assert "MY_PRIVATE_PASSWORD_123" not in pdf_text
+    assert "000-00-0000" not in pdf_text
+    assert "BANK_ACCOUNT_999" not in pdf_text
+
+    # Valid indicator explanations must survive masking
+    assert "credential request or password mentioned" in pdf_text
 
 def test_app_analysis_export_path_with_masking():
     """Verify that checking the mask option in app.py reaches all three export generators."""

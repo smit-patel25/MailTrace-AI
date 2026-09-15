@@ -176,19 +176,41 @@ def calculate_fraud_score(
                     matched_hostname = extracted_host
                     break
 
-            org_asn = str(geolocation_result.get("location", {}).get("org", "")).lower() + " " + str(geolocation_result.get("location", {}).get("as", "")).lower()
+            org_asn = ""
+            if geolocation_result.get("available") is True and isinstance(geolocation_result.get("location"), dict):
+                org_val = geolocation_result["location"].get("org")
+                asn_val = geolocation_result["location"].get("as")
+
+                org = org_val.strip().lower() if isinstance(org_val, str) else ""
+                asn = asn_val.strip().lower() if isinstance(asn_val, str) else ""
+
+                if org:
+                    org_asn = (org + " " + asn).strip()
 
             is_recognized_infra = False
-            if matched_hostname:
-                if "google" in org_asn and (matched_hostname == "google.com" or matched_hostname.endswith(".google.com") or matched_hostname == "googlemail.com" or matched_hostname.endswith(".googlemail.com")):
-                    is_recognized_infra = True
-                elif "microsoft" in org_asn and (matched_hostname == "outlook.com" or matched_hostname.endswith(".outlook.com")):
-                    is_recognized_infra = True
-                elif "amazon" in org_asn and (matched_hostname == "amazonses.com" or matched_hostname.endswith(".amazonses.com")):
-                    is_recognized_infra = True
+            is_deceptive_infra = False
+            if matched_hostname and org_asn:
+                if matched_hostname == "google.com" or matched_hostname.endswith(".google.com") or matched_hostname == "googlemail.com" or matched_hostname.endswith(".googlemail.com"):
+                    if "google" in org_asn:
+                        is_recognized_infra = True
+                    else:
+                        is_deceptive_infra = True
+                elif matched_hostname == "outlook.com" or matched_hostname.endswith(".outlook.com"):
+                    if "microsoft" in org_asn:
+                        is_recognized_infra = True
+                    else:
+                        is_deceptive_infra = True
+                elif matched_hostname == "amazonses.com" or matched_hostname.endswith(".amazonses.com"):
+                    if "amazon" in org_asn:
+                        is_recognized_infra = True
+                    else:
+                        is_deceptive_infra = True
 
             if is_recognized_infra:
                 top_reasons.append("Recognized email delivery infrastructure — neutral signal. Note: The IP is a mail relay, not necessarily the sender's device or physical origin.")
+            elif is_deceptive_infra:
+                infra_points += 20
+                top_reasons.append("Claimed trusted delivery hostname does not match the reported network organization.")
             else:
                 if geolocation_result.get("proxy"):
                     infra_points += 10

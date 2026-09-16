@@ -49,7 +49,9 @@ else:
                 st.rerun()
 
             st.write(f"**Filename:** {case_data.get('filename')}")
-            st.write(f"**Origin IP:** {case_data.get('probable_origin_ip')}")
+            origin_ip = case_data.get('probable_origin_ip')
+            origin_ip_display = "Unavailable" if origin_ip in (None, "", "N/A") else str(origin_ip)
+            st.write(f"**Origin IP:** {origin_ip_display}")
             st.write(f"**Verdict:** {case_data.get('verdict')}")
 
             manifest = case_data.get("analyzer_results", {}).get("evidence_manifest")

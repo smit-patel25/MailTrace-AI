@@ -892,6 +892,10 @@ def style_plotly_figure(fig):
     fig.update_yaxes(gridcolor=grid_color, linecolor=axis_color,
                      tickfont=dict(color=axis_color), title_font=dict(color=font_color),
                      zerolinecolor=grid_color)
+
+    if not fig.layout.title or not fig.layout.title.text:
+        fig.update_layout(title_text="")
+
     return fig
 
 

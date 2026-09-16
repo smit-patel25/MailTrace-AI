@@ -91,3 +91,11 @@ def test_collection_time_protection(tmp_path):
 
     assert result.returncode != 0
     assert "SocketBlockedError" in result.stderr or "SocketBlockedError" in result.stdout
+
+def test_asyncio_unix_socket_allowed():
+    """Verify that asyncio event loops can be created, which requires a local AF_UNIX socket on Linux."""
+    import asyncio
+    try:
+        loop = asyncio.new_event_loop()
+    finally:
+        loop.close()

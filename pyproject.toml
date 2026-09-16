@@ -18,4 +18,4 @@ ignore = ["E501", "E701", "E741"]
 "tests/*" = ["E402", "F841", "E721", "F401"]
 
 [tool.pytest.ini_options]
-addopts = "--disable-socket"
+addopts = "--disable-socket --allow-unix-socket"
